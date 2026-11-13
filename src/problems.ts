@@ -5,7 +5,7 @@
  * describes, so the learner can match words to shapes without re-reading.
  */
 
-export type ColorKey = 'length' | 'width' | 'total';
+export type ColorKey = 'length' | 'width' | 'height' | 'total';
 
 /** A run of step text. A tuple marks a color-coded quantity. */
 export type TextRun = string | readonly [string, ColorKey];

@@ -8,6 +8,7 @@ import type {ColorKey, Diagram} from './problems';
 export const PALETTE: Record<ColorKey | 'line' | 'faint', string> = {
   length: '#FFA94D',
   width: '#4DABF7',
+  height: '#F783AC',
   total: '#69DB7C',
   line: '#FFFFFF',
   faint: '#5C5C5C',

@@ -43,3 +43,19 @@ body,
   flex-direction: column;
   gap: var(--uit-spacing-small);
 }
+
+.stage {
+  position: relative;
+  inline-size: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: var(--uit-corner-radius-medium);
+}
+
+.stage-layer {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
