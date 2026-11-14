@@ -48,23 +48,20 @@ enum GlassesScreens {
 
   struct StepActions: Sendable {
     var previous: Action
-    var hint: Action
     var next: Action
     var scan: Action
   }
 
   /// One solution step, visual first: the picture (progress dots, model and
   /// math strip) carries the step. Words appear only as an optional short
-  /// caption and as hints the learner asks for. Buttons are icons only.
+  /// caption. Buttons are icons only: back, next (or scan on the last step).
   static func step(
     _ step: ScanStep,
     index: Int,
     count: Int,
-    hintsShown: Int,
     picture: UIImage?,
     actions: StepActions
   ) -> FlexBox {
-    let hints = Array(step.hints.prefix(hintsShown))
     let isLast = index == count - 1
     // Without a picture the strip is not drawn, so fall back to the sentence.
     let words = picture == nil ? step.plainText : step.caption
@@ -75,12 +72,8 @@ enum GlassesScreens {
       if !words.isEmpty {
         Text(words, style: .body)
       }
-      for hint in hints {
-        Text(hint, style: .body, color: .secondary)
-      }
       ButtonGroup {
         Button(label: "", style: .secondary, iconName: .arrowLeft, onClick: actions.previous)
-        Button(label: "", style: .secondary, iconName: .lightBulb, onClick: actions.hint)
         if isLast {
           Button(label: "", style: .primary, iconName: .fourCornerFrame, onClick: actions.scan)
             .actionRole(.primary)

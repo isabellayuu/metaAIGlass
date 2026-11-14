@@ -133,8 +133,6 @@ struct ContentView: View {
       try? await Task.sleep(for: .seconds(3))
       glasses.next()
     }
-    try? await Task.sleep(for: .seconds(2))
-    glasses.hint()
     // Scan again after the simulated stream has had time to end
     // (shorter with -autopilot-video, which records a demo instead of testing).
     try? await Task.sleep(for: .seconds(Self.videoMode ? 4 : 25))
@@ -143,9 +141,7 @@ struct ContentView: View {
     NSLog("[MathLens] autopilot: second scan ok")
     if Self.videoMode {
       for _ in 0..<4 {
-        try? await Task.sleep(for: .seconds(3))
-        glasses.hint()
-        try? await Task.sleep(for: .seconds(2))
+        try? await Task.sleep(for: .seconds(4))
         glasses.next()
       }
       try? await Task.sleep(for: .seconds(4))
@@ -225,16 +221,9 @@ struct ContentView: View {
       }
       coloredText(step)
         .font(.title3)
-      ForEach(Array(step.hints.prefix(glasses.hintsShown).enumerated()), id: \.offset) { _, hint in
-        Label(hint, systemImage: "lightbulb")
-          .foregroundStyle(.secondary)
-      }
       HStack {
         Button("Back") { glasses.previous() }
           .disabled(glasses.stepIndex == 0)
-        Spacer()
-        Button("Hint") { glasses.hint() }
-          .disabled(glasses.hintsShown >= step.hints.count)
         Spacer()
         Button("Next") { glasses.next() }
           .disabled(glasses.stepIndex >= scan.steps.count - 1)

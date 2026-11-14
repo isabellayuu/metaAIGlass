@@ -105,10 +105,9 @@ struct ScanStep: Decodable, Sendable {
   var expression: [TextRun]
   /// Optional caption of a few words, shown only when picture and strip are not enough.
   var caption: String
-  var hints: [String]
   var highlight: Highlight
 
-  enum CodingKeys: String, CodingKey { case label, text, expression, caption, hints, highlight }
+  enum CodingKeys: String, CodingKey { case label, text, expression, caption, highlight }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -117,7 +116,6 @@ struct ScanStep: Decodable, Sendable {
     expression = try c.decodeIfPresent([TextRun].self, forKey: .expression) ?? []
     caption = (try c.decodeIfPresent(String.self, forKey: .caption) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    hints = try c.decodeIfPresent([String].self, forKey: .hints) ?? []
     highlight = (try? c.decode(Highlight.self, forKey: .highlight)) ?? .none
   }
 

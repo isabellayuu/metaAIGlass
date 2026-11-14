@@ -29,7 +29,6 @@ final class GlassesController {
   private(set) var needsGlassesAppUpdate = false
   private(set) var scan: Scan?
   private(set) var stepIndex = 0
-  private(set) var hintsShown = 0
   private(set) var lastPhoto: UIImage?
   private(set) var streamStatus = "Camera off"
   var server: String {
@@ -453,7 +452,6 @@ final class GlassesController {
       if result.found, !result.steps.isEmpty {
         scan = result
         stepIndex = 0
-        hintsShown = 0
         pictures = [:]
         phase = .showing
         refreshGlasses()
@@ -472,20 +470,12 @@ final class GlassesController {
   func next() {
     guard let scan, phase == .showing, stepIndex < scan.steps.count - 1 else { return }
     stepIndex += 1
-    hintsShown = 0
     refreshGlasses()
   }
 
   func previous() {
     guard phase == .showing, stepIndex > 0 else { return }
     stepIndex -= 1
-    hintsShown = 0
-    refreshGlasses()
-  }
-
-  func hint() {
-    guard phase == .showing, let step = currentStep, hintsShown < step.hints.count else { return }
-    hintsShown += 1
     refreshGlasses()
   }
 
@@ -540,7 +530,6 @@ final class GlassesController {
       }
       let actions = GlassesScreens.StepActions(
         previous: { [weak self] in Task { @MainActor in self?.previous() } },
-        hint: { [weak self] in Task { @MainActor in self?.hint() } },
         next: { [weak self] in Task { @MainActor in self?.next() } },
         scan: onScan
       )
@@ -549,7 +538,6 @@ final class GlassesController {
           step,
           index: stepIndex,
           count: scan.steps.count,
-          hintsShown: hintsShown,
           picture: picture(for: stepIndex),
           actions: actions
         ),
