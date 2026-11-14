@@ -128,7 +128,42 @@ struct ScanStep: Decodable, Sendable {
 
   /// The step as one plain string (the glasses display has no text colors).
   var plainText: String {
-    text.map(\.t).joined().trimmingCharacters(in: .whitespacesAndNewlines)
+    readableText.map(\.t).joined()
+  }
+
+  /// The text pieces with normal spacing between them, so joining them always
+  /// reads as a sentence ("cost of" + "3" → "cost of 3"), even when a model
+  /// leaves the spaces out. The server tidies text too (server/tidyText.ts).
+  var readableText: [TextRun] {
+    var out: [TextRun] = []
+    for run in text {
+      var t = run.t.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+      if t.trimmingCharacters(in: .whitespaces).isEmpty {
+        if let last = out.last, !last.t.hasSuffix(" ") { out[out.count - 1].t += " " }
+        continue
+      }
+      if let last = out.last {
+        if last.t.hasSuffix(" ") && t.hasPrefix(" ") {
+          t.removeFirst()
+        } else if !last.t.hasSuffix(" ") && !t.hasPrefix(" ") && Self.needsSpace(last.t, t) {
+          t = " " + t
+        }
+      }
+      out.append(TextRun(t: t, color: run.color))
+    }
+    if !out.isEmpty {
+      out[0].t = String(out[0].t.drop { $0 == " " })
+      while out[out.count - 1].t.hasSuffix(" ") { out[out.count - 1].t.removeLast() }
+    }
+    return out.filter { !$0.t.isEmpty }
+  }
+
+  /// True when the end of `a` and the start of `b` would run together.
+  private static func needsSpace(_ a: String, _ b: String) -> Bool {
+    guard let end = a.last, let start = b.first else { return false }
+    if ".,;:!?)]%’'”".contains(start) || "([“‘$€£".contains(end) { return false }
+    let joins = { (c: Character) in c.isLetter || c.isNumber || "=+×÷−".contains(c) }
+    return (joins(end) || ")%²³".contains(end)) && (joins(start) || start == "(")
   }
 
   /// The color-coded quantities in this step, in order and without repeats.

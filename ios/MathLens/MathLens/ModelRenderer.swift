@@ -87,6 +87,14 @@ enum ModelRenderer {
   private static let labelPx = 30.0
   private static let resultPx = 46.0
 
+  /// Above these sizes a picture would be too busy on the glasses, so it is
+  /// simplified: no grid of tiles or cubes (just outlines and lengths), one
+  /// plate with "× groups", or a number instead of many balls.
+  private static let maxTiles = 60.0
+  private static let maxCubes = 36.0
+  private static let maxPlates = 6
+  private static let maxBallsPerPlate = 12
+
   private struct Model {
     var prims: [Prim]
     var extent: Double
@@ -145,7 +153,7 @@ enum ModelRenderer {
 
       if m.kind == .rectangle {
         g.box(L, t * 0.5, W, dim, false)
-        if roles.contains(.area), isInt(L), isInt(W), L * W <= 400 {
+        if roles.contains(.area), isInt(L), isInt(W), L * W <= maxTiles {
           for i in 0..<Int(L) {
             for j in 0..<Int(W) {
               g.box(0.86, t * 0.6, 0.86, totalColor, true,
@@ -153,7 +161,7 @@ enum ModelRenderer {
             }
           }
         }
-      } else if isInt(L), isInt(W), isInt(H), L * W * H <= 400 {
+      } else if isInt(L), isInt(W), isInt(H), L * W * H <= maxCubes {
         for i in 0..<Int(L) {
           for j in 0..<Int(W) {
             for k in 0..<Int(H) {
@@ -194,9 +202,12 @@ enum ModelRenderer {
       return Model(prims: g.prims, extent: extent * 1.4)
 
     case .groups:
-      let G = max(1, min(12, Int(m.groups.rounded())))
-      let N = max(1, min(25, Int(m.perGroup.rounded())))
-      let cols = Int(Double(N).squareRoot().rounded(.up))
+      let groups = max(1, Int(m.groups.rounded()))
+      let items = max(1, Int(m.perGroup.rounded()))
+      // Many groups: one plate and "× groups". Many items: a number on the plate.
+      let G = groups <= maxPlates ? groups : 1
+      let N = items <= maxBallsPerPlate ? items : 0
+      let cols = Int(Double(max(N, 1)).squareRoot().rounded(.up))
       let plate = Double(cols) + 0.6
       let perRow = min(G, 4)
       let total = roles.contains(.total)
@@ -207,8 +218,11 @@ enum ModelRenderer {
         let gx = Double(gi % perRow) * (plate + 0.8) - Double(perRow - 1) * (plate + 0.8) / 2
         let gz = Double(gi / perRow) * (plate + 0.8)
         g.box(plate, 0.15, plate, platesOn ? widthColor : dim, platesOn, Vec3(gx, 0, gz))
-        if platesOn && !total {
+        if platesOn && !total && G > 1 {
           g.label("\(gi + 1)", widthColor, labelPx, Vec3(gx, 0, gz + plate / 2 + 0.7))
+        }
+        if N == 0 {
+          g.label("\(items)", total ? totalColor : lengthColor, labelPx, Vec3(gx, 0.5, gz))
         }
         for n in 0..<N {
           // Apples stay orange even when another part is highlighted, so it is
@@ -222,6 +236,9 @@ enum ModelRenderer {
       }
       let width = Double(perRow) * (plate + 0.8)
       let ls = width * 0.14
+      if G < groups {
+        g.label("× \(groups)", widthColor, labelPx, Vec3(plate / 2 + 1.6, 0.3, 0))
+      }
       if total {
         g.label("?", totalColor, resultPx, Vec3(0, ls * 2, 0))
       }

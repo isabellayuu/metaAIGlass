@@ -77,7 +77,7 @@ export const ScanSchema = z.object({
       }),
     )
     .describe(
-      '3-6 small steps. No step states the final answer; the last step asks the learner to do the last calculation.',
+      '3-5 small steps (fewer is better). No step states the final answer; the last step asks the learner to do the last calculation.',
     ),
 });
 

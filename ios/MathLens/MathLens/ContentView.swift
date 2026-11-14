@@ -234,7 +234,7 @@ struct ContentView: View {
 
   /// The step with each quantity in its model color (the phone has full color).
   private func coloredText(_ step: ScanStep) -> Text {
-    step.text.reduce(Text("")) { text, run in
+    step.readableText.reduce(Text("")) { text, run in
       if let color = run.color.uiColor {
         text + Text(run.t).foregroundColor(Color(color)).bold()
       } else {

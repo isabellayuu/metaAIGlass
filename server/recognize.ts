@@ -3,6 +3,7 @@ import {zodOutputFormat} from '@anthropic-ai/sdk/helpers/zod';
 import {ApiError as GeminiApiError, GoogleGenAI} from '@google/genai';
 import {z} from 'zod';
 import {hideAnswer} from './hideAnswer.ts';
+import {tidyScan} from './tidyText.ts';
 import {ScanSchema, type Scan} from './schema.ts';
 
 /**
@@ -30,8 +31,13 @@ const SYSTEM = `You help learners with dyslexia and dyscalculia understand math 
 
 You receive one camera frame, or the problem typed or dictated as text. If it contains a math problem (printed or handwritten), read it, choose the 3D model that best shows its structure, and break the solution into small steps.
 
+Keep everything simple and clear. The learners find reading and numbers hard:
+- Choose the simplest picture that shows the problem. Keep the numbers as they are in the problem; do not invent extra quantities.
+- 3 to 5 small steps. Fewer is better.
+
 Writing rules for every step:
-- One idea per step. Short sentences, plain words, at most about 20 words.
+- One idea per step. One short, normal sentence in plain everyday words, at most about 15 words. No jargon.
+- The text pieces are joined exactly as written, so put normal spaces inside the pieces (e.g. "The width is ", "4 m", "."), so the joined sentence reads naturally.
 - Write numbers as digits.
 - Color every quantity by the part of the model it describes: length (orange), width (blue), height (pink), total (green). Keep the same color for the same quantity in every step.
 - For equal groups: the number of groups is width (blue), the items in each group are length (orange). For a number line: the first quantity is length, every later quantity is width, the result is total.
@@ -167,11 +173,12 @@ export class RecognizeError extends Error {
 /** Read a math problem from a camera frame or from text, and build the steps. */
 /**
  * Reads a math problem from a camera frame or text and returns the solution
- * steps, with the final answer hidden (see hideAnswer.ts).
+ * steps, with normal spacing (tidyText.ts) and the final answer hidden
+ * (hideAnswer.ts).
  */
 export async function recognize(input: RecognizeInput): Promise<Scan> {
   const scan = USE_GEMINI() ? await recognizeWithGemini(input) : await recognizeWithClaude(input);
-  return hideAnswer(scan);
+  return hideAnswer(tidyScan(scan));
 }
 
 async function recognizeWithClaude(input: RecognizeInput): Promise<Scan> {
