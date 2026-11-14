@@ -15,6 +15,9 @@ import type {Scan} from './schema.ts';
  * - Runs colored `total` stand for the result, so a bare number in one of
  *   them is replaced too ("24" → "?"), while words such as "the area" stay.
  *
+ * - In each step's diagram the unknown is "?" without a value, and no
+ *   unknown, result hint or derived item may carry the answer's value.
+ *
  * Use cases: camera scans and typed problems in the web app, and photos from
  * the glasses in the iOS app; all of them go through `recognize()`.
  */
@@ -41,6 +44,7 @@ export function hideAnswer(scan: Scan): Scan {
       t: run.color === 'total' ? scrubNumbers(scrub(run.t)) : scrub(run.t),
     })),
     caption: scrub(step.caption ?? ''),
+    diagram: step.diagram && hideInDiagram(step.diagram, scrub, answerValue(scan.answer)),
     hints: step.hints.map(scrub),
   }));
   return {...scan, answer: '', steps};
@@ -64,6 +68,33 @@ export function answerPatterns(answer: string): RegExp[] {
     patterns.push(new RegExp(`(?<![\\d.,])${escape(number)}\\s*${escape(unit.trim())}`, 'gi'));
   }
   return patterns;
+}
+
+type Diagram = Scan['steps'][number]['diagram'];
+
+/** The answer's number, e.g. 60 for "€60" or 0.75 for "0.75 kg"; null if none. */
+export function answerValue(answer: string): number | null {
+  const m = answer.replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : null;
+}
+
+/**
+ * Diagram items: the unknown is always "?" with no value, and an item that
+ * is not given in the problem (unknown, result hint or derived) never carries
+ * the answer's value. Labels are scrubbed like the text.
+ */
+function hideInDiagram(diagram: Diagram, scrub: (t: string) => string, answer: number | null): Diagram {
+  const same = (v: number | null) => v !== null && answer !== null && Math.abs(v - answer) < 1e-9;
+  return {
+    ...diagram,
+    items: (diagram.items ?? []).map(item => {
+      const hidden =
+        item.role === 'unknown' || ((item.role === 'result_hint' || item.derived) && same(item.value));
+      return hidden
+        ? {...item, label: HIDDEN, value: null, role: 'unknown' as const, color: 'total' as const}
+        : {...item, label: scrub(item.label)};
+    }),
+  };
 }
 
 /** Replaces every standalone number in `text` with the placeholder. */

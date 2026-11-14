@@ -4,6 +4,9 @@ import UIKit
 /// Mirrors `ScanSchema` in server/schema.ts. Decoding is lenient: a missing
 /// field falls back to an empty value so one odd model answer doesn't fail the scan.
 struct Scan: Decodable, Sendable {
+  /// False when the planner does not handle this kind of problem; see `reason`.
+  var supported: Bool
+  var reason: String
   var found: Bool
   var problemText: String
   var model: ScanModel
@@ -11,12 +14,14 @@ struct Scan: Decodable, Sendable {
   var steps: [ScanStep]
 
   enum CodingKeys: String, CodingKey {
-    case found, model, answer, steps
+    case supported, reason, found, model, answer, steps
     case problemText = "problem_text"
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
+    supported = try c.decodeIfPresent(Bool.self, forKey: .supported) ?? true
+    reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
     found = try c.decodeIfPresent(Bool.self, forKey: .found) ?? false
     problemText = try c.decodeIfPresent(String.self, forKey: .problemText) ?? ""
     model = try c.decodeIfPresent(ScanModel.self, forKey: .model) ?? ScanModel()
@@ -105,9 +110,11 @@ struct ScanStep: Decodable, Sendable {
   var expression: [TextRun]
   /// Optional caption of a few words, shown only when picture and strip are not enough.
   var caption: String
+  /// The step's one diagram, planned by the model and drawn by the app.
+  var diagram: Diagram?
   var highlight: Highlight
 
-  enum CodingKeys: String, CodingKey { case label, text, expression, caption, highlight }
+  enum CodingKeys: String, CodingKey { case label, text, expression, caption, diagram, highlight }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -117,6 +124,8 @@ struct ScanStep: Decodable, Sendable {
     caption = (try c.decodeIfPresent(String.self, forKey: .caption) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
     highlight = (try? c.decode(Highlight.self, forKey: .highlight)) ?? .none
+    let plan = try? c.decodeIfPresent(Diagram.self, forKey: .diagram)
+    diagram = (plan?.items.isEmpty ?? true) ? nil : plan
   }
 
   /// The math strip to draw: the server's expression, or (from an older server)
@@ -185,5 +194,72 @@ extension UIColor {
       blue: CGFloat(hex & 0xFF) / 255,
       alpha: alpha
     )
+  }
+}
+
+/// One diagram from the planner (server/schema.ts DiagramSchema). Every bar or
+/// point shares one unit and one scale; the unknown is "?" without a value.
+struct Diagram: Decodable, Sendable {
+  enum Kind: String, Decodable, Sendable {
+    case barCompare = "bar_compare"
+    case barSplit = "bar_split"
+    case scalePair = "scale_pair"
+    case beforeAfter = "before_after"
+    case numberLine = "number_line"
+  }
+
+  enum Role: String, Decodable, Sendable {
+    case known, unknown, distractor
+    case resultHint = "result_hint"
+  }
+
+  struct Item: Decodable, Sendable {
+    var label: String
+    var value: Double?
+    var role: Role
+    var derived: Bool
+    var color: ColorRole
+
+    enum CodingKeys: String, CodingKey { case label, value, role, derived, color }
+
+    init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      label = (try c.decodeIfPresent(String.self, forKey: .label) ?? "").trimmingCharacters(in: .whitespaces)
+      value = try? c.decodeIfPresent(Double.self, forKey: .value)
+      role = (try? c.decode(Role.self, forKey: .role)) ?? .known
+      derived = (try? c.decodeIfPresent(Bool.self, forKey: .derived)) ?? false
+      color = (try? c.decode(ColorRole.self, forKey: .color)) ?? .none
+      if role == .unknown { value = nil }
+    }
+
+    /// The unknown (or a missing value) is drawn as "?".
+    var isUnknown: Bool { role == .unknown || value == nil }
+  }
+
+  var kind: Kind
+  var unit: String
+  var total: Double?
+  var items: [Item]
+  var parts: Int
+  var shaded: Int
+  var factor: Double?
+  var start: Double
+  var end: Double
+
+  enum CodingKeys: String, CodingKey { case type, unit, total, items, parts, shaded, factor, start, end }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    kind = (try? c.decode(Kind.self, forKey: .type)) ?? .barCompare
+    unit = (try c.decodeIfPresent(String.self, forKey: .unit) ?? "").trimmingCharacters(in: .whitespaces)
+    total = try? c.decodeIfPresent(Double.self, forKey: .total)
+    // At most 3 bars (4 points on a number line), as the planner promises.
+    let all = try c.decodeIfPresent([Item].self, forKey: .items) ?? []
+    items = Array(all.prefix(kind == .numberLine ? 4 : 3))
+    parts = min(12, max(0, Int((try? c.decodeIfPresent(Double.self, forKey: .parts)) ?? 0)))
+    shaded = max(0, Int((try? c.decodeIfPresent(Double.self, forKey: .shaded)) ?? 0))
+    factor = try? c.decodeIfPresent(Double.self, forKey: .factor)
+    start = (try? c.decodeIfPresent(Double.self, forKey: .start)) ?? 0
+    end = (try? c.decodeIfPresent(Double.self, forKey: .end)) ?? 0
   }
 }

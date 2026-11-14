@@ -37,6 +37,10 @@ export function tidyScan(scan: Scan): Scan {
       text: tidyRuns(step.text),
       caption: tidySentence(step.caption ?? ''),
       expression: (step.expression ?? []).map(run => ({...run, t: run.t.trim()})).filter(run => run.t),
+      diagram: step.diagram && {
+        ...step.diagram,
+        items: (step.diagram.items ?? []).map(item => ({...item, label: tidySentence(item.label)})),
+      },
     })),
   };
 }

@@ -1,7 +1,8 @@
 import UIKit
 
 /// Draws one solution step as a picture for the glasses display: progress
-/// dots, the color-coded 3D model, and the step's math strip (e.g. 6 × 4 = ?).
+/// dots, the step's diagram (DiagramRenderer) or the color-coded 3D model, and
+/// the step's math strip (e.g. 6 × 4 = ?).
 ///
 /// NumLens is visual first: the picture and the strip carry the step, so the
 /// glasses show few or no words. The model is a port of `buildModel` /
@@ -36,7 +37,10 @@ enum ModelRenderer {
       // Measure the drawn model and fit it, centred, into the space between
       // the dots and the strip, whatever its shape (wide number line, tall box…).
       let area = CGRect(x: 16, y: top, width: size.width - 32, height: bottom - top)
-      if scan.model.kind == .numberLine {
+      if let diagram = step.diagram {
+        // The planner's diagram for this step (see DiagramRenderer).
+        DiagramRenderer.draw(diagram, in: ctx, area: area.insetBy(dx: 6, dy: 4))
+      } else if scan.model.kind == .numberLine {
         drawNumberLine(scan.model.values, highlight: step.highlight, in: ctx, area: area.insetBy(dx: 14, dy: 4))
       } else {
         // Leave room for the fixed-size labels around the model.
@@ -121,6 +125,9 @@ enum ModelRenderer {
       prims.append(.label(c: c + offset, text: text, color: color, size: size))
     }
   }
+
+  /// A number as short text: 4 not 4.0, 2.5 as 2.5.
+  static func number(_ n: Double) -> String { num(n) }
 
   private static func num(_ n: Double) -> String {
     n == n.rounded() && abs(n) < 1e12 ? String(Int(n)) : String(n)
@@ -459,7 +466,8 @@ enum ModelRenderer {
     }
   }
 
-  private static func drawOutlined(_ text: String, color: UIColor, size: CGFloat, centeredAt p: CGPoint) {
+  /// Bold text with a dark outline, centred on `p`, readable over anything.
+  static func drawOutlined(_ text: String, color: UIColor, size: CGFloat, centeredAt p: CGPoint) {
     let font = UIFont.systemFont(ofSize: size, weight: .bold)
     let outline = NSAttributedString(string: text, attributes: [
       .font: font, .strokeColor: UIColor(white: 0, alpha: 0.85), .strokeWidth: 18,

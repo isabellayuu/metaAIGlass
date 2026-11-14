@@ -459,6 +459,8 @@ final class GlassesController {
         pictures = [:]
         phase = .showing
         refreshGlasses()
+      } else if !result.supported, !result.reason.isEmpty {
+        showNotice("NumLens can't draw this one: \(result.reason)")
       } else {
         showNotice("No math problem found, try again")
       }
