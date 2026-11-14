@@ -12,7 +12,7 @@ enum GlassesScreens {
   static func ready(onScan: @escaping Action) -> FlexBox {
     FlexBox(direction: .column, spacing: 12, crossAlignment: .center) {
       Icon(name: .fourCornerFrame)
-      Text("Math Lens", style: .heading)
+      Text("NumLens", style: .heading)
       Text("Look at a math problem, then tap Scan.", style: .body, color: .secondary)
       ButtonGroup {
         Button(label: "Scan", style: .primary, iconName: .fourCornerFrame, onClick: onScan)
@@ -53,7 +53,9 @@ enum GlassesScreens {
     var scan: Action
   }
 
-  /// One solution step: label and progress, model picture, text, revealed hints, buttons.
+  /// One solution step, visual first: the picture (progress dots, model and
+  /// math strip) carries the step. Words appear only as an optional short
+  /// caption and as hints the learner asks for. Buttons are icons only.
   static func step(
     _ step: ScanStep,
     index: Int,
@@ -64,27 +66,30 @@ enum GlassesScreens {
   ) -> FlexBox {
     let hints = Array(step.hints.prefix(hintsShown))
     let isLast = index == count - 1
+    // Without a picture the strip is not drawn, so fall back to the sentence.
+    let words = picture == nil ? step.plainText : step.caption
     return FlexBox(direction: .column, spacing: 8) {
-      Text("\(step.label) · \(index + 1)/\(count)", style: .meta, color: .secondary)
       if let picture {
         Image(image: picture, sizePreset: .fill, cornerRadius: .medium)
       }
-      Text(step.plainText, style: .body)
+      if !words.isEmpty {
+        Text(words, style: .body)
+      }
       for hint in hints {
-        Text("Hint: \(hint)", style: .body, color: .secondary)
+        Text(hint, style: .body, color: .secondary)
       }
       ButtonGroup {
-        Button(label: "Back", style: .secondary, iconName: .arrowLeft, onClick: actions.previous)
-        Button(label: "Hint", style: .secondary, iconName: .lightBulb, onClick: actions.hint)
+        Button(label: "", style: .secondary, iconName: .arrowLeft, onClick: actions.previous)
+        Button(label: "", style: .secondary, iconName: .lightBulb, onClick: actions.hint)
         if isLast {
-          Button(label: "Scan", style: .primary, iconName: .fourCornerFrame, onClick: actions.scan)
+          Button(label: "", style: .primary, iconName: .fourCornerFrame, onClick: actions.scan)
             .actionRole(.primary)
         } else {
-          Button(label: "Next", style: .primary, iconName: .arrowRight, onClick: actions.next)
+          Button(label: "", style: .primary, iconName: .arrowRight, onClick: actions.next)
             .actionRole(.primary)
         }
         if !isLast {
-          Button(label: "Scan", style: .outline, iconName: .fourCornerFrame, onClick: actions.scan)
+          Button(label: "", style: .outline, iconName: .fourCornerFrame, onClick: actions.scan)
         }
       }
     }

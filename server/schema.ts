@@ -62,6 +62,14 @@ export const ScanSchema = z.object({
           .describe(
             'The step as runs of text. Give each quantity the color of the model part it belongs to; plain words use "none".',
           ),
+        expression: z
+          .array(z.object({t: z.string(), color: ColorRole}))
+          .describe(
+            'The step as a short visual math strip: numbers and symbols only, no words, at most 7 pieces, one operation per step. Each number keeps the color of its model part; operators (+ − × ÷ = → ∫ and similar) use "none"; a result from an earlier step is a number with color "none". Where the result of this step goes, write "?" in the total color. Example: [6 length] [× none] [4 width] [= none] [? total]. Empty only if the step has no calculation.',
+          ),
+        caption: z
+          .string()
+          .describe('Optional caption of at most 4 plain words, for when the picture and strip alone are not clear (e.g. "Garden is a rectangle"). Usually empty.'),
         hints: z
           .array(z.string())
           .describe('1-3 Socratic questions that guide without giving the answer.'),

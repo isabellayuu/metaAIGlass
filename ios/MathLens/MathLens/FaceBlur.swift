@@ -7,7 +7,7 @@ import Vision
 /// Blurs every face in a photo from the glasses before the photo leaves the phone.
 ///
 /// The glasses camera sees whatever the wearer looks at, which can include
-/// classmates, teachers or family. For their privacy Math Lens finds faces on
+/// classmates, teachers or family. For their privacy NumLens finds faces on
 /// the phone with Apple's Vision framework and covers each one with a heavy
 /// pixelate + blur, so faces are never sent to the server (or to Gemini) and
 /// never shown in the app. Everything runs on the device.

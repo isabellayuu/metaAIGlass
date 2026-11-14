@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// Sends a glasses photo to the Math Lens server (POST /api/recognize).
+/// Sends a glasses photo to the NumLens server (POST /api/recognize).
 /// The Gemini key lives on the server; the app only knows the server URL.
 struct RecognizeClient: Sendable {
   static let defaultServer = "https://meta-ai-glass.vercel.app"

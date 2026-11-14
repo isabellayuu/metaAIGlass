@@ -9,8 +9,9 @@ import type {Scan} from './schema.ts';
  * answer in a step or hint. This file is the safety net for when it does:
  *
  * - `answer` is always sent back empty, so no client can show it.
- * - Any step text or hint that still contains the answer (for example
- *   "The area is 24 m²") gets the answer replaced with "?".
+ * - Any step text, math strip (`expression`), caption or hint that still
+ *   contains the answer (for example "The area is 24 m²") gets the answer
+ *   replaced with "?".
  * - Runs colored `total` stand for the result, so a bare number in one of
  *   them is replaced too ("24" → "?"), while words such as "the area" stay.
  *
@@ -34,6 +35,12 @@ export function hideAnswer(scan: Scan): Scan {
       ...run,
       t: run.color === 'total' ? scrubNumbers(scrub(run.t)) : scrub(run.t),
     })),
+    // `?? []` / `?? ''`: tolerate a model reply that leaves the new fields out.
+    expression: (step.expression ?? []).map(run => ({
+      ...run,
+      t: run.color === 'total' ? scrubNumbers(scrub(run.t)) : scrub(run.t),
+    })),
+    caption: scrub(step.caption ?? ''),
     hints: step.hints.map(scrub),
   }));
   return {...scan, answer: '', steps};

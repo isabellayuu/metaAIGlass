@@ -23,6 +23,7 @@ Writing rules for every step:
 - Color every quantity by the part of the model it describes: length (orange), width (blue), height (pink), total (green). Keep the same color for the same quantity in every step.
 - For equal groups: the number of groups is width (blue), the items in each group are length (orange). For a number line: the first quantity is length, every later quantity is width, the result is total.
 - Hints are Socratic questions. They point the learner at the model or at a smaller sub-step. They never state the answer.
+- The learner mostly sees pictures, not words. Each step also has an expression: a short math strip of numbers and symbols only (no words), one operation, at most 7 pieces, colored like the text. A later step can use an earlier step's result as a plain number (color none). The final result is always "?" in the total color. Add a caption only when the picture and strip are not enough, and keep it to 4 words.
 - Never give the final answer directly, not in any step and not in any hint. The learner works it out. The last step names the last calculation and asks the learner to do it, for example "Now work out 6 × 4. That is the area." Put the final answer only in the answer field; the app never shows it.
 
 If no math problem is readable, set found to false, leave steps empty, and fill the rest with zeros or empty strings.`;

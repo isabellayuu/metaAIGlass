@@ -86,6 +86,11 @@ struct TextRun: Decodable, Sendable {
 
   enum CodingKeys: String, CodingKey { case t, color }
 
+  init(t: String, color: ColorRole) {
+    self.t = t
+    self.color = color
+  }
+
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     t = try c.decodeIfPresent(String.self, forKey: .t) ?? ""
@@ -96,17 +101,31 @@ struct TextRun: Decodable, Sendable {
 struct ScanStep: Decodable, Sendable {
   var label: String
   var text: [TextRun]
+  /// The step as a visual math strip: numbers and symbols only, e.g. 6 × 4 = ?
+  var expression: [TextRun]
+  /// Optional caption of a few words, shown only when picture and strip are not enough.
+  var caption: String
   var hints: [String]
   var highlight: Highlight
 
-  enum CodingKeys: String, CodingKey { case label, text, hints, highlight }
+  enum CodingKeys: String, CodingKey { case label, text, expression, caption, hints, highlight }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
     text = try c.decodeIfPresent([TextRun].self, forKey: .text) ?? []
+    expression = try c.decodeIfPresent([TextRun].self, forKey: .expression) ?? []
+    caption = (try c.decodeIfPresent(String.self, forKey: .caption) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
     hints = try c.decodeIfPresent([String].self, forKey: .hints) ?? []
     highlight = (try? c.decode(Highlight.self, forKey: .highlight)) ?? .none
+  }
+
+  /// The math strip to draw: the server's expression, or (from an older server)
+  /// the step's color-coded quantities in order.
+  var strip: [TextRun] {
+    let pieces = expression.filter { !$0.t.trimmingCharacters(in: .whitespaces).isEmpty }
+    return pieces.isEmpty ? coloredRuns : pieces
   }
 
   /// The step as one plain string (the glasses display has no text colors).

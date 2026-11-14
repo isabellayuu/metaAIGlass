@@ -1,21 +1,24 @@
 import UIKit
 
-/// Draws the color-coded 3D model of a problem to an image for the glasses
-/// display. A port of `buildModel` / `drawModel` in src/ar/arStage.ts: boxes,
-/// balls and labels, orthographic projection, far faces first.
+/// Draws one solution step as a picture for the glasses display: progress
+/// dots, the color-coded 3D model, and the step's math strip (e.g. 6 × 4 = ?).
 ///
-/// Below the model the step's color-coded quantities are drawn as chips,
-/// because text on the glasses display can only be white or gray.
-/// The background is black, which is see-through on the glasses.
+/// NumLens is visual first: the picture and the strip carry the step, so the
+/// glasses show few or no words. The model is a port of `buildModel` /
+/// `drawModel` in src/ar/arStage.ts (boxes, balls and labels, orthographic
+/// projection, far faces first). Colors live in the picture because text on
+/// the glasses display can only be white or gray. The background is black,
+/// which is see-through on the glasses.
 enum ModelRenderer {
-  static let size = CGSize(width: 600, height: 300)
-  private static let chipBand: CGFloat = 64
+  static let size = CGSize(width: 600, height: 400)
+  private static let dotsBand: CGFloat = 40
+  private static let stripBand: CGFloat = 96
 
-  /// Draws the model for one step. The final answer is never drawn: where the
-  /// result would go the picture shows "?", so the learner works it out.
-  static func render(scan: Scan, step: ScanStep) -> UIImage {
+  /// Draws step `index` of `count`. The final answer is never drawn: where
+  /// the result would go, the model and the strip show "?".
+  static func render(scan: Scan, step: ScanStep, index: Int, count: Int) -> UIImage {
     let model = buildModel(scan: scan, highlight: step.highlight)
-    let chips = step.coloredRuns
+    let strip = step.strip
     let format = UIGraphicsImageRendererFormat()
     format.scale = 1
     format.opaque = true
@@ -24,20 +27,33 @@ enum ModelRenderer {
       UIColor.black.setFill()
       ctx.fill(CGRect(origin: .zero, size: size))
 
-      let modelHeight = chips.isEmpty ? size.height : size.height - chipBand
-      let target = min(size.width, modelHeight) * 0.78
+      drawDots(index: index, count: count, in: ctx)
+      let top = dotsBand
+      let bottom = strip.isEmpty ? size.height : size.height - stripBand
+      let modelHeight = bottom - top
+      let target = min(size.width * 0.95, modelHeight * 1.3)
       let tilt = scan.model.kind == .numberLine ? (x: 0.2, y: -0.15) : (x: 0.55, y: -0.6)
       draw(
         model,
         in: ctx,
-        origin: CGPoint(x: size.width / 2, y: modelHeight * 0.55),
+        origin: CGPoint(x: size.width / 2, y: top + modelHeight * 0.55),
         scale: target / model.extent,
         rx: tilt.x,
         ry: tilt.y
       )
-      if !chips.isEmpty {
-        drawChips(chips, in: ctx, band: CGRect(x: 0, y: modelHeight, width: size.width, height: chipBand))
+      if !strip.isEmpty {
+        drawStrip(strip, in: ctx, band: CGRect(x: 0, y: bottom, width: size.width, height: stripBand))
       }
+    }
+  }
+
+  /// Progress as dots (filled up to the current step) instead of "4/5".
+  private static func drawDots(index: Int, count: Int, in ctx: CGContext) {
+    guard count > 1 else { return }
+    for i in 0..<count {
+      let rect = CGRect(x: 20 + CGFloat(i) * 26, y: 14, width: 14, height: 14)
+      ctx.setFillColor((i <= index ? UIColor.white : UIColor(white: 0.35, alpha: 1)).cgColor)
+      ctx.fillEllipse(in: rect)
     }
   }
 
@@ -368,45 +384,75 @@ enum ModelRenderer {
     fill.draw(at: at)
   }
 
-  // MARK: - Chips
+  // MARK: - Math strip
 
-  /// The step's color-coded quantities as a centred row of outlined pills.
-  private static func drawChips(_ runs: [TextRun], in ctx: CGContext, band: CGRect) {
-    var size: CGFloat = 28
-    let pad: CGFloat = 14
+  /// How a strip piece is drawn.
+  private enum PieceStyle {
+    case chip(UIColor)  // a quantity: pill outlined in its model color
+    case block  // a result from an earlier step: white-outlined box
+    case symbol  // an operator such as + − × ÷ = →
+  }
+
+  private static func style(of run: TextRun) -> PieceStyle {
+    if let color = run.color.uiColor { return .chip(color) }
+    let t = run.t.trimmingCharacters(in: .whitespaces)
+    return t.rangeOfCharacter(from: .decimalDigits) != nil ? .block : .symbol
+  }
+
+  /// The step's math strip, centred in `band`, shrunk to fit the width.
+  private static func drawStrip(_ runs: [TextRun], in ctx: CGContext, band: CGRect) {
+    let pad: CGFloat = 16
     let gap: CGFloat = 10
-    func layout(_ size: CGFloat) -> [(NSAttributedString, CGSize)] {
+    func layout(_ fontSize: CGFloat) -> [(NSAttributedString, CGSize, PieceStyle)] {
       runs.map { run in
+        let style = style(of: run)
+        let color: UIColor = if case .chip(let c) = style { c } else { .white }
         let text = NSAttributedString(string: run.t.trimmingCharacters(in: .whitespaces), attributes: [
-          .font: UIFont.systemFont(ofSize: size, weight: .bold),
-          .foregroundColor: run.color.uiColor ?? .white,
+          .font: UIFont.systemFont(ofSize: fontSize, weight: .heavy),
+          .foregroundColor: color,
         ])
         let s = text.size()
-        return (text, CGSize(width: s.width + pad * 2, height: s.height + 12))
+        let width: CGFloat = if case .symbol = style { s.width } else { s.width + pad * 2 }
+        return (text, CGSize(width: width, height: s.height + 14), style)
       }
     }
-    var chips = layout(size)
-    var total = chips.reduce(-gap) { $0 + $1.1.width + gap }
-    while total > band.width - 24 && size > 16 {
-      size -= 2
-      chips = layout(size)
-      total = chips.reduce(-gap) { $0 + $1.1.width + gap }
+    var fontSize: CGFloat = 46
+    var pieces = layout(fontSize)
+    var total = pieces.reduce(-gap) { $0 + $1.1.width + gap }
+    while total > band.width - 24 && fontSize > 18 {
+      fontSize -= 2
+      pieces = layout(fontSize)
+      total = pieces.reduce(-gap) { $0 + $1.1.width + gap }
     }
 
     var x = band.midX - total / 2
-    for ((text, chip), run) in zip(chips, runs) {
-      let rect = CGRect(x: x, y: band.midY - chip.height / 2, width: chip.width, height: chip.height)
-      let path = UIBezierPath(roundedRect: rect, cornerRadius: chip.height / 2)
-      let color = run.color.uiColor ?? .white
-      ctx.setFillColor(color.withAlphaComponent(0.18).cgColor)
-      ctx.addPath(path.cgPath)
-      ctx.fillPath()
-      ctx.setStrokeColor(color.cgColor)
-      ctx.setLineWidth(3)
-      ctx.addPath(path.cgPath)
-      ctx.strokePath()
-      text.draw(at: CGPoint(x: rect.minX + pad, y: rect.minY + 6))
-      x += chip.width + gap
+    for (text, box, style) in pieces {
+      let rect = CGRect(x: x, y: band.midY - box.height / 2, width: box.width, height: box.height)
+      switch style {
+      case .chip(let color):
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2)
+        ctx.setFillColor(color.withAlphaComponent(0.18).cgColor)
+        ctx.addPath(path.cgPath)
+        ctx.fillPath()
+        ctx.setStrokeColor(color.cgColor)
+        ctx.setLineWidth(4)
+        ctx.addPath(path.cgPath)
+        ctx.strokePath()
+      case .block:
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: 10)
+        ctx.setFillColor(UIColor(white: 0.22, alpha: 1).cgColor)
+        ctx.addPath(path.cgPath)
+        ctx.fillPath()
+        ctx.setStrokeColor(UIColor.white.cgColor)
+        ctx.setLineWidth(3)
+        ctx.addPath(path.cgPath)
+        ctx.strokePath()
+      case .symbol:
+        break
+      }
+      let s = text.size()
+      text.draw(at: CGPoint(x: rect.midX - s.width / 2, y: rect.midY - s.height / 2))
+      x += box.width + gap
     }
   }
 }

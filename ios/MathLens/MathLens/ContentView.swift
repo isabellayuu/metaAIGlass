@@ -17,9 +17,21 @@ struct ContentView: View {
     "A garden is 6 m long and 4 m wide. What is the area of the garden?"
   #endif
 
+  /// Background color of the NumLens logo (#100F14).
+  static let brandBackground = Color(red: 16 / 255, green: 15 / 255, blue: 20 / 255)
+
   var body: some View {
     NavigationStack {
       Form {
+        // Brand header: the NumLens logo on the brand background.
+        Image("Logo")
+          .resizable()
+          .scaledToFit()
+          .frame(maxWidth: 280)
+          .frame(maxWidth: .infinity)
+          .accessibilityLabel("NumLens")
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
         if let error = glasses.errorMessage {
           Section {
             Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -66,8 +78,14 @@ struct ContentView: View {
           )
         }
       }
-      .navigationTitle("Math Lens")
+      .navigationTitle("NumLens")
+      .toolbar(.hidden, for: .navigationBar)
+      .scrollContentBackground(.hidden)
+      .tint(Color.accentColor)
+      .background(Self.brandBackground)
     }
+    // The logo is designed for a dark background, so the app is always dark.
+    .preferredColorScheme(.dark)
     #if DEBUG
     .task {
       // `-autopilot` (Xcode scheme argument or simctl launch): runs the whole
@@ -78,7 +96,9 @@ struct ContentView: View {
   }
 
   #if DEBUG
-  private static let autopilotOn = ProcessInfo.processInfo.arguments.contains("-autopilot")
+  private static let videoMode = ProcessInfo.processInfo.arguments.contains("-autopilot-video")
+  private static let autopilotOn =
+    ProcessInfo.processInfo.arguments.contains("-autopilot") || videoMode
 
   private func autopilot() async {
     func waitFor(_ what: String, _ condition: () -> Bool) async -> Bool {
@@ -92,7 +112,17 @@ struct ContentView: View {
     simulatedOn = true
     guard await waitFor("simulated glasses", { simulated.display != nil }) else { return }
     guard await waitFor("registration", { glasses.registration == .registered }) else { return }
-    await glasses.connect()
+    // The mock device can take a moment to appear; retry the connection a few times.
+    for attempt in 1...5 where glasses.phase != .ready {
+      if glasses.phase == .idle {
+        try? await Task.sleep(for: .seconds(1))
+        NSLog("[MathLens] autopilot: connect attempt \(attempt)")
+        await glasses.connect()
+      }
+      for _ in 0..<20 where glasses.phase != .ready && glasses.phase != .idle {
+        try? await Task.sleep(for: .milliseconds(250))
+      }
+    }
     guard await waitFor("display", { glasses.phase == .ready }) else { return }
     try? await Task.sleep(for: .seconds(2))
     glasses.scanTapped()
@@ -105,11 +135,21 @@ struct ContentView: View {
     }
     try? await Task.sleep(for: .seconds(2))
     glasses.hint()
-    // Scan again after the simulated stream has had time to end.
-    try? await Task.sleep(for: .seconds(25))
+    // Scan again after the simulated stream has had time to end
+    // (shorter with -autopilot-video, which records a demo instead of testing).
+    try? await Task.sleep(for: .seconds(Self.videoMode ? 4 : 25))
     glasses.scanTapped()
     guard await waitFor("second scan", { glasses.phase == .showing && glasses.stepIndex == 0 }) else { return }
     NSLog("[MathLens] autopilot: second scan ok")
+    if Self.videoMode {
+      for _ in 0..<4 {
+        try? await Task.sleep(for: .seconds(3))
+        glasses.hint()
+        try? await Task.sleep(for: .seconds(2))
+        glasses.next()
+      }
+      try? await Task.sleep(for: .seconds(4))
+    }
     NSLog("[MathLens] autopilot: done")
   }
   #endif

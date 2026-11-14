@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Math Lens</string>
+	<string>NumLens</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>MathLens</string>
+	<string>NumLens</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -64,7 +64,7 @@
 		<string>com.meta.ar.wearable</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Math Lens uses Bluetooth to connect to your glasses.</string>
+	<string>NumLens uses Bluetooth to connect to your glasses.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This lets your phone find and connect to your glasses over Wi-Fi.</string>
 	<key>NSBonjourServices</key>

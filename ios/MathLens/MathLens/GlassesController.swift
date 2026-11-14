@@ -150,7 +150,7 @@ final class GlassesController {
     guard phase == .idle else { return }
     errorMessage = nil
     guard registration == .registered else {
-      fail("Connect Math Lens to Meta AI first.")
+      fail("Connect NumLens to Meta AI first.")
       return
     }
 
@@ -495,7 +495,9 @@ final class GlassesController {
     if let cached = pictures[index] { return cached }
     let image = ModelRenderer.render(
       scan: scan,
-      step: scan.steps[index]
+      step: scan.steps[index],
+      index: index,
+      count: scan.steps.count
     )
     pictures[index] = image
     return image
