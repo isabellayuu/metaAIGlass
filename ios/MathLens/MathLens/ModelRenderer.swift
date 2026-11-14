@@ -10,9 +10,11 @@ import UIKit
 /// the glasses display can only be white or gray. The background is black,
 /// which is see-through on the glasses.
 enum ModelRenderer {
+  /// Same size as before on purpose: a taller picture pushed the caption and
+  /// buttons around on the glasses display.
   static let size = CGSize(width: 600, height: 340)
-  private static let dotsBand: CGFloat = 36
-  private static let stripBand: CGFloat = 88
+  private static let dotsBand: CGFloat = 30
+  private static let stripBand: CGFloat = 84
 
   /// Draws step `index` of `count`. The final answer is never drawn: where
   /// the result would go, the model and the strip show "?".
@@ -38,7 +40,7 @@ enum ModelRenderer {
         drawNumberLine(scan.model.values, highlight: step.highlight, in: ctx, area: area.insetBy(dx: 14, dy: 4))
       } else {
         // Leave room for the fixed-size labels around the model.
-        let (origin, scale) = fit(model, rx: tilt.x, ry: tilt.y, into: area.insetBy(dx: 40, dy: 22))
+        let (origin, scale) = fit(model, rx: tilt.x, ry: tilt.y, into: area.insetBy(dx: 36, dy: 16))
         draw(model, in: ctx, origin: origin, scale: scale, rx: tilt.x, ry: tilt.y)
       }
       if !strip.isEmpty {
@@ -211,7 +213,6 @@ enum ModelRenderer {
       let plate = Double(cols) + 0.6
       let perRow = min(G, 4)
       let total = roles.contains(.total)
-      let itemsOn = total || roles.contains(.length)
       let platesOn = roles.contains(.width)
       g.offset = Vec3(0, 0, -Double((G - 1) / perRow) * (plate + 0.8) * 0.5)
       for gi in 0..<G {
@@ -227,7 +228,7 @@ enum ModelRenderer {
         for n in 0..<N {
           // Apples stay orange even when another part is highlighted, so it is
           // always clear what lies on the plates.
-          g.ball(0.36, total ? totalColor : lengthColor, itemsOn || total, Vec3(
+          g.ball(0.36, total ? totalColor : lengthColor, true, Vec3(
             gx - Double(cols - 1) / 2 + Double(n % cols),
             0.45,
             gz - Double(cols - 1) / 2 + Double(n / cols)
@@ -436,9 +437,25 @@ enum ModelRenderer {
     }
 
     // Labels face the viewer and sit on top, outlined so they read over anything.
+    // Measurements are moved a fixed distance away from the model's centre, so
+    // they sit next to their edge instead of on it; the "?" stays in place.
+    let centre = items.isEmpty ? origin : {
+      let pts = items.compactMap { item -> CGPoint? in
+        if case let .polygon(p, _, _) = item.item { return p.first }
+        if case let .ball(c, _, _, _) = item.item { return c }
+        return nil
+      }
+      let n = CGFloat(max(pts.count, 1))
+      return CGPoint(x: pts.reduce(0) { $0 + $1.x } / n, y: pts.reduce(0) { $0 + $1.y } / n)
+    }()
     for label in labels {
-      let px = label.px
-      drawOutlined(label.text, color: label.color, size: px, centeredAt: label.at)
+      var at = label.at
+      if label.text != "?" {
+        let dx = at.x - centre.x, dy = at.y - centre.y
+        let len = max((dx * dx + dy * dy).squareRoot(), 1)
+        at = CGPoint(x: at.x + dx / len * 22, y: at.y + dy / len * 22)
+      }
+      drawOutlined(label.text, color: label.color, size: label.px, centeredAt: at)
     }
   }
 

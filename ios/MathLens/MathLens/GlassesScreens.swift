@@ -52,9 +52,10 @@ enum GlassesScreens {
     var scan: Action
   }
 
-  /// One solution step: the picture (progress dots, model and math strip) and
-  /// below it the same sentence the phone shows. Buttons are icons only:
-  /// back, next (or scan on the last step).
+  /// One solution step, picture first: progress dots, the model and the math
+  /// strip, and under it only a short caption of a few words (the full
+  /// sentence stays on the phone). Buttons are icons only: back, next (or scan
+  /// on the last step).
   static func step(
     _ step: ScanStep,
     index: Int,
@@ -63,8 +64,11 @@ enum GlassesScreens {
     actions: StepActions
   ) -> FlexBox {
     let isLast = index == count - 1
-    // The step's sentence, as on the phone (the caption if there is none).
-    let words = step.plainText.isEmpty ? step.caption : step.plainText
+    // A short caption; a short sentence is fine too, a long one stays on the phone.
+    let sentence = step.plainText
+    let words = !step.caption.isEmpty
+      ? step.caption
+      : (sentence.split(separator: " ").count <= 6 || picture == nil ? sentence : "")
     return FlexBox(direction: .column, spacing: 8) {
       if let picture {
         Image(image: picture, sizePreset: .fill, cornerRadius: .medium)

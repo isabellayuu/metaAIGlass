@@ -69,7 +69,7 @@ export const ScanSchema = z.object({
           ),
         caption: z
           .string()
-          .describe('Optional caption of at most 4 plain words, for when the picture and strip alone are not clear (e.g. "Garden is a rectangle"). Usually empty.'),
+          .describe('Always fill. A short caption of 2-5 plain words shown under the picture on the glasses, e.g. "Length is 6 m", "Count the plates", "Multiply the sides". No full sentences, never the final answer.'),
         hints: z
           .array(z.string())
           .describe('1-3 Socratic questions that guide without giving the answer.'),
