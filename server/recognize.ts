@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import {zodOutputFormat} from '@anthropic-ai/sdk/helpers/zod';
 import {ApiError as GeminiApiError, GoogleGenAI} from '@google/genai';
 import {z} from 'zod';
+import {hideAnswer} from './hideAnswer.ts';
 import {ScanSchema, type Scan} from './schema.ts';
 
 /**
@@ -22,6 +23,7 @@ Writing rules for every step:
 - Color every quantity by the part of the model it describes: length (orange), width (blue), height (pink), total (green). Keep the same color for the same quantity in every step.
 - For equal groups: the number of groups is width (blue), the items in each group are length (orange). For a number line: the first quantity is length, every later quantity is width, the result is total.
 - Hints are Socratic questions. They point the learner at the model or at a smaller sub-step. They never state the answer.
+- Never give the final answer directly, not in any step and not in any hint. The learner works it out. The last step names the last calculation and asks the learner to do it, for example "Now work out 6 × 4. That is the area." Put the final answer only in the answer field; the app never shows it.
 
 If no math problem is readable, set found to false, leave steps empty, and fill the rest with zeros or empty strings.`;
 
@@ -113,8 +115,13 @@ export class RecognizeError extends Error {
 }
 
 /** Read a math problem from a camera frame or from text, and build the steps. */
+/**
+ * Reads a math problem from a camera frame or text and returns the solution
+ * steps, with the final answer hidden (see hideAnswer.ts).
+ */
 export async function recognize(input: RecognizeInput): Promise<Scan> {
-  return USE_GEMINI() ? recognizeWithGemini(input) : recognizeWithClaude(input);
+  const scan = USE_GEMINI() ? await recognizeWithGemini(input) : await recognizeWithClaude(input);
+  return hideAnswer(scan);
 }
 
 async function recognizeWithClaude(input: RecognizeInput): Promise<Scan> {

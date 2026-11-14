@@ -1,0 +1,62 @@
+import Foundation
+
+/// Built-in example problems for Demo mode: the app takes the photo as usual
+/// but shows one of these instead of asking the server. Like the server's
+/// answers, they never state the final answer: the last step asks the learner
+/// to do the last calculation. Useful without a
+/// Gemini key, without network, or as a fallback on stage.
+/// The JSON has the same shape as the server's answer (server/schema.ts).
+enum DemoScans {
+  private static let json = [
+    #"""
+    {"found": true, "problem_text": "A garden is 6 m long and 4 m wide. What is the area of the garden?",
+     "model": {"kind": "rectangle", "length": 6, "width": 4, "height": 0, "groups": 0, "per_group": 0, "values": [], "unit": "m"},
+     "answer": "",
+     "steps": [
+      {"label": "Read", "text": [{"t": "The garden is a rectangle.", "color": "none"}], "hints": ["What shape is the garden?"], "highlight": "none"},
+      {"label": "Length", "text": [{"t": "The length is ", "color": "none"}, {"t": "6 m", "color": "length"}, {"t": ".", "color": "none"}], "hints": ["Which side is the longer one?"], "highlight": "length"},
+      {"label": "Width", "text": [{"t": "The width is ", "color": "none"}, {"t": "4 m", "color": "width"}, {"t": ".", "color": "none"}], "hints": ["Which side is the shorter one?", "Find the blue edge."], "highlight": "width"},
+      {"label": "Area", "text": [{"t": "Area = length × width = ", "color": "none"}, {"t": "6", "color": "length"}, {"t": " × ", "color": "none"}, {"t": "4", "color": "width"}], "hints": ["How many squares fit in one row?", "How many rows are there?"], "highlight": "area"},
+      {"label": "Solve", "text": [{"t": "Now work out ", "color": "none"}, {"t": "6", "color": "length"}, {"t": " × ", "color": "none"}, {"t": "4", "color": "width"}, {"t": ". That is ", "color": "none"}, {"t": "the area", "color": "total"}, {"t": " in m².", "color": "none"}], "hints": ["Count the green squares.", "What is 6 + 6 + 6 + 6?"], "highlight": "total"}
+     ]}
+    """#,
+    #"""
+    {"found": true, "problem_text": "There are 3 plates. Each plate has 4 apples. How many apples are there?",
+     "model": {"kind": "groups", "length": 0, "width": 0, "height": 0, "groups": 3, "per_group": 4, "values": [], "unit": "apples"},
+     "answer": "",
+     "steps": [
+      {"label": "Read", "text": [{"t": "Apples are shared on plates.", "color": "none"}], "hints": ["What is on each plate?"], "highlight": "none"},
+      {"label": "Groups", "text": [{"t": "There are ", "color": "none"}, {"t": "3", "color": "width"}, {"t": " plates.", "color": "none"}], "hints": ["Count the blue plates."], "highlight": "groups"},
+      {"label": "Each", "text": [{"t": "Each plate has ", "color": "none"}, {"t": "4", "color": "length"}, {"t": " apples.", "color": "none"}], "hints": ["Count the apples on one plate."], "highlight": "length"},
+      {"label": "Multiply", "text": [{"t": "Apples = ", "color": "none"}, {"t": "3", "color": "width"}, {"t": " × ", "color": "none"}, {"t": "4", "color": "length"}], "hints": ["Can you add 4 three times?"], "highlight": "groups"},
+      {"label": "Solve", "text": [{"t": "Now work out ", "color": "none"}, {"t": "3", "color": "width"}, {"t": " × ", "color": "none"}, {"t": "4", "color": "length"}, {"t": ". That is ", "color": "none"}, {"t": "all the apples", "color": "total"}, {"t": ".", "color": "none"}], "hints": ["Count the green balls.", "What is 4 + 4 + 4?"], "highlight": "total"}
+     ]}
+    """#,
+    #"""
+    {"found": true, "problem_text": "Mia has 8 stickers. She gets 5 more and gives away 3. How many does she have now?",
+     "model": {"kind": "number_line", "length": 0, "width": 0, "height": 0, "groups": 0, "per_group": 0, "values": [8, 5, -3], "unit": "stickers"},
+     "answer": "",
+     "steps": [
+      {"label": "Start", "text": [{"t": "Mia starts with ", "color": "none"}, {"t": "8", "color": "length"}, {"t": " stickers.", "color": "none"}], "hints": ["Find the orange bar."], "highlight": "length"},
+      {"label": "Add", "text": [{"t": "She gets ", "color": "none"}, {"t": "5", "color": "width"}, {"t": " more.", "color": "none"}], "hints": ["Does she have more or fewer now?"], "highlight": "width"},
+      {"label": "Take", "text": [{"t": "She gives away ", "color": "none"}, {"t": "3", "color": "width"}, {"t": ".", "color": "none"}], "hints": ["Which way does the last bar go?", "What is 8 + 5 first?"], "highlight": "width"},
+      {"label": "Solve", "text": [{"t": "Now work out ", "color": "none"}, {"t": "8", "color": "length"}, {"t": " + ", "color": "none"}, {"t": "5", "color": "width"}, {"t": " − ", "color": "none"}, {"t": "3", "color": "width"}, {"t": ". That is ", "color": "none"}, {"t": "what Mia has now", "color": "total"}, {"t": ".", "color": "none"}], "hints": ["Do 8 + 5 first.", "Then take 3 away."], "highlight": "total"}
+     ]}
+    """#,
+    #"""
+    {"found": true, "problem_text": "A box is 3 cm long, 2 cm wide and 2 cm high. What is its volume?",
+     "model": {"kind": "box", "length": 3, "width": 2, "height": 2, "groups": 0, "per_group": 0, "values": [], "unit": "cm"},
+     "answer": "",
+     "steps": [
+      {"label": "Length", "text": [{"t": "The box is ", "color": "none"}, {"t": "3 cm", "color": "length"}, {"t": " long.", "color": "none"}], "hints": ["Find the orange edge."], "highlight": "length"},
+      {"label": "Width", "text": [{"t": "It is ", "color": "none"}, {"t": "2 cm", "color": "width"}, {"t": " wide.", "color": "none"}], "hints": ["Find the blue edge."], "highlight": "width"},
+      {"label": "Height", "text": [{"t": "It is ", "color": "none"}, {"t": "2 cm", "color": "height"}, {"t": " high.", "color": "none"}], "hints": ["Find the pink edge."], "highlight": "height"},
+      {"label": "Volume", "text": [{"t": "Volume = ", "color": "none"}, {"t": "3", "color": "length"}, {"t": " × ", "color": "none"}, {"t": "2", "color": "width"}, {"t": " × ", "color": "none"}, {"t": "2", "color": "height"}], "hints": ["How many cubes are in the bottom layer?", "How many layers are there?"], "highlight": "area"},
+      {"label": "Solve", "text": [{"t": "Now work out ", "color": "none"}, {"t": "3", "color": "length"}, {"t": " × ", "color": "none"}, {"t": "2", "color": "width"}, {"t": " × ", "color": "none"}, {"t": "2", "color": "height"}, {"t": ". That is ", "color": "none"}, {"t": "the volume", "color": "total"}, {"t": " in cm³.", "color": "none"}], "hints": ["Count the cubes in one layer.", "How many layers are there?"], "highlight": "total"}
+     ]}
+    """#,
+  ]
+
+  /// All demo problems, decoded once.
+  static let all: [Scan] = json.compactMap { try? JSONDecoder().decode(Scan.self, from: Data($0.utf8)) }
+}

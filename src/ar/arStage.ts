@@ -139,8 +139,9 @@ function buildModel(scan: Scan, h: ScanHighlight): Model {
     if (hOn && H > 0 && !total) {
       g.label(fmt(m.height, unit), PALETTE.height, ls, [L / 2 + ls * 1.2, H / 2, W / 2]);
     }
-    if (total && scan.answer) {
-      g.label(scan.answer, PALETTE.total, ls * 1.4, [0, Math.max(H, t) + ls * 1.2, 0]);
+    if (total) {
+      // The result is never written: the learner works it out (see server/hideAnswer.ts).
+      g.label('?', PALETTE.total, ls * 1.4, [0, Math.max(H, t) + ls * 1.2, 0]);
     }
     return {prims: g.prims, extent: extent * 1.4};
   }
@@ -170,8 +171,8 @@ function buildModel(scan: Scan, h: ScanHighlight): Model {
     }
     const width = perRow * (plate + 0.8);
     const ls = width * 0.14;
-    if (total && scan.answer) {
-      g.label(scan.answer, PALETTE.total, ls * 1.4, [0, ls * 2, 0]);
+    if (total) {
+      g.label('?', PALETTE.total, ls * 1.4, [0, ls * 2, 0]);
     } else if (platesOn) {
       g.label(`${G} groups`, PALETTE.width, ls, [0, ls * 1.6, 0]);
     }
@@ -203,7 +204,8 @@ function buildModel(scan: Scan, h: ScanHighlight): Model {
   });
   if (roles.has('total')) {
     g.box(Math.max(0.05, Math.abs(sum) * scale), bar, bar, PALETTE.total, true, [(sum * scale) / 2, -bar * 1.6, 0]);
-    g.label(scan.answer || String(sum), PALETTE.total, 1.8, [(sum * scale) / 2, -bar * 1.6 - 1.5, 0]);
+    // The result is never written: the learner works it out (see server/hideAnswer.ts).
+    g.label('?', PALETTE.total, 1.8, [(sum * scale) / 2, -bar * 1.6 - 1.5, 0]);
   }
   // Centre the line horizontally.
   for (const p of g.prims) p.c[0] -= (lo + hi) / 2;

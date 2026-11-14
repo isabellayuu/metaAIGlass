@@ -50,11 +50,13 @@ export const ScanSchema = z.object({
       .describe('number_line: each quantity in order; subtraction as a negative number. Else [].'),
     unit: z.string().describe('Unit word or symbol such as "m", "cm", "apples"; empty if none.'),
   }),
-  answer: z.string().describe('Final answer with unit.'),
+  answer: z
+    .string()
+    .describe('Final answer with unit. Used only to check the steps; the app never shows it.'),
   steps: z
     .array(
       z.object({
-        label: z.string().describe('One word naming the step, e.g. Read, Length, Add, Answer.'),
+        label: z.string().describe('One word naming the step, e.g. Read, Length, Add, Solve.'),
         text: z
           .array(z.object({t: z.string(), color: ColorRole}))
           .describe(
@@ -66,7 +68,9 @@ export const ScanSchema = z.object({
         highlight: Highlight.describe('Which part of the 3D model to light up for this step.'),
       }),
     )
-    .describe('3-6 small steps. The last step states the answer.'),
+    .describe(
+      '3-6 small steps. No step states the final answer; the last step asks the learner to do the last calculation.',
+    ),
 });
 
 export type Scan = z.infer<typeof ScanSchema>;
