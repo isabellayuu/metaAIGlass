@@ -1,13 +1,13 @@
 import {StrictMode} from 'react';
 import {App} from '@wearables-ui-toolkit/mrbd';
 import {createRoot} from 'react-dom/client';
-import {MathPage} from './MathPage';
+import {LensApp} from './LensApp';
 import './app.css';
 
 function Root() {
   return (
     <App>
-      <MathPage />
+      <LensApp />
     </App>
   );
 }

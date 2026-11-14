@@ -18,7 +18,10 @@ export function useCamera() {
     setState({status: 'off'});
   }, []);
 
+  const starting = useRef(false);
+
   const start = useCallback(async () => {
+    if (starting.current || streamRef.current) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       setState({
         status: 'error',
@@ -27,6 +30,7 @@ export function useCamera() {
       return;
     }
     setState({status: 'starting'});
+    starting.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {facingMode: 'environment', width: {ideal: 1280}, height: {ideal: 720}},
@@ -45,6 +49,8 @@ export function useCamera() {
               ? 'No camera was found.'
               : 'The camera could not start.',
       });
+    } finally {
+      starting.current = false;
     }
   }, []);
 
@@ -66,6 +72,15 @@ export function captureFrame(video: HTMLVideoElement): string | null {
   return canvas.toDataURL('image/jpeg', 0.85).split(',')[1] ?? null;
 }
 
+export class ScanError extends Error {
+  /** True when retrying cannot help, such as a missing API key. */
+  readonly fatal: boolean;
+  constructor(message: string, fatal: boolean) {
+    super(message);
+    this.fatal = fatal;
+  }
+}
+
 export async function requestScan(image: string, signal: AbortSignal): Promise<Scan> {
   const res = await fetch('/api/recognize', {
     method: 'POST',
@@ -74,6 +89,8 @@ export async function requestScan(image: string, signal: AbortSignal): Promise<S
     signal,
   });
   const body = (await res.json().catch(() => ({}))) as Scan & {error?: string};
-  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  if (!res.ok) {
+    throw new ScanError(body.error ?? `Request failed (${res.status})`, res.status === 401 || res.status === 404);
+  }
   return body;
 }

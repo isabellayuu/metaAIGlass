@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@google/genai": "^3.3.0",
     "@wearables-ui-toolkit/icons": "130.33.0",
     "@wearables-ui-toolkit/mrbd": "130.33.0",
     "react": "^19.3.1",

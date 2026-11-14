@@ -4,7 +4,7 @@ import {defineConfig, loadEnv, type Connect, type Plugin} from 'vite';
 
 /**
  * Serves POST /api/recognize from the Vite dev and preview servers, so the
- * Anthropic key stays on this machine and never reaches the browser bundle.
+ * API key stays on this machine and never reaches the browser bundle.
  * (api/recognize.ts serves the same route when deployed to Vercel.)
  */
 function recognizeApi(): Plugin {
@@ -47,8 +47,8 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
 }
 
 export default defineConfig(({mode}) => {
-  // Load ANTHROPIC_API_KEY from .env.local into the server process only.
-  const env = loadEnv(mode, process.cwd(), 'ANTHROPIC_');
+  // Load GEMINI_* / ANTHROPIC_* keys from .env.local into the server process only.
+  const env = loadEnv(mode, process.cwd(), ['GEMINI_', 'ANTHROPIC_']);
   for (const [key, value] of Object.entries(env)) process.env[key] ??= value;
   return {plugins: [react(), recognizeApi()]};
 });

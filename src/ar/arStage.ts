@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type {Scan, ScanHighlight} from '../../server/schema';
-import {PALETTE} from '../diagram';
+import {PALETTE} from '../palette';
 import {GrayFrame, Tracker, type Box} from './tracker';
 
 /**
@@ -294,6 +294,10 @@ export class ARStage {
   private smooth: Box | null = null;
   private readonly canvas: HTMLCanvasElement;
   private readonly video: HTMLVideoElement;
+  private shown = false;
+  private idleCleared = false;
+  /** Called when the tracked problem comes into or leaves the camera view. */
+  onTracking: ((visible: boolean) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, video: HTMLVideoElement) {
     this.canvas = canvas;
@@ -376,8 +380,19 @@ export class ARStage {
     cancelAnimationFrame(this.raf);
   }
 
+  /** Stop and leave the canvas empty, ready to start again. */
+  pause() {
+    this.stop();
+    this.setScan(null, null, 'none');
+    this.idleCleared = false;
+    this.setShown(false);
+    this.renderer.clear();
+  }
+
   dispose() {
     this.stop();
+    // Leave the canvas empty, not frozen on the last model.
+    this.renderer.clear();
     if (this.model) dispose(this.model);
     this.renderer.dispose();
   }
@@ -394,12 +409,23 @@ export class ARStage {
       this.camera.updateProjectionMatrix();
     }
 
-    if (this.tracker) {
-      const g = GrayFrame.grab(this.video, this.grayCtx);
-      if (g) this.tracker.update(g);
+    if (!this.tracker) {
+      // Nothing recognised: keep the display empty (black is clear on glasses).
+      if (!this.idleCleared) {
+        this.pivot.visible = false;
+        this.frameLine.visible = false;
+        this.renderer.render(this.scene, this.camera);
+        this.idleCleared = true;
+      }
+      this.setShown(false);
+      return;
     }
+    this.idleCleared = false;
 
-    const box = this.tracker ? this.toStage(this.tracker.box, W, H) : null;
+    const g = GrayFrame.grab(this.video, this.grayCtx);
+    if (g) this.tracker.update(g);
+
+    const box = this.toStage(this.tracker.box, W, H);
     if (box) {
       const k = this.smooth ? 0.35 : 1;
       this.smooth = this.smooth
@@ -412,30 +438,36 @@ export class ARStage {
         : box;
     }
 
-    const lost = this.tracker?.lost ?? true;
-    if (this.smooth) {
+    const visible = !this.tracker.lost && this.smooth !== null;
+    this.setShown(visible);
+    this.pivot.visible = visible;
+    this.frameLine.visible = visible;
+    if (visible && this.smooth) {
       const b = this.smooth;
-      this.frameLine.visible = !lost;
       this.frameLine.position.set(b.x, -b.y, 0);
       this.frameLine.scale.set(b.w, b.h, 1);
 
-      // Hover the model just above the problem, sized to its width.
-      const target = Math.min(W * 0.62, Math.max(W * 0.32, b.w * 1.1));
-      const s = target / this.extent;
-      const above = b.y - target * 0.42;
-      const cy = Math.max(target * 0.42, above);
+      // Hover the model just above the problem, sized to its width, but keep
+      // it in the band between the step text (top) and the buttons (bottom).
+      const target = Math.min(W * 0.5, Math.max(W * 0.3, b.w * 1.1));
+      const half = target * 0.35;
+      const minC = H * 0.32 + half;
+      const maxC = H * 0.82 - half;
+      const above = b.y - half - H * 0.02;
+      const cy = minC > maxC ? (minC + maxC) / 2 : Math.min(maxC, Math.max(minC, above));
       this.pivot.position.set(b.x + b.w / 2, -cy, 0);
-      this.pivot.scale.setScalar(s);
-    } else {
-      this.frameLine.visible = false;
-      const s = (W * 0.5) / this.extent;
-      this.pivot.position.set(W / 2, -H / 2, 0);
-      this.pivot.scale.setScalar(s);
+      this.pivot.scale.setScalar(target / this.extent);
     }
 
     // A gentle sway shows depth; the tilt shows the top face.
     this.pivot.rotation.set(this.tilt.x, this.tilt.y + Math.sin(t / 1400) * 0.18, 0);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private setShown(visible: boolean) {
+    if (visible === this.shown) return;
+    this.shown = visible;
+    this.onTracking?.(visible);
   }
 
   /** Map a box in video-normalised coordinates to stage pixels (video uses object-fit: cover). */

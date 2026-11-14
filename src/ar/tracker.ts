@@ -177,3 +177,31 @@ export class Tracker {
     }
   }
 }
+
+/** Mean absolute grey-level change between two frames of the same size. */
+export function frameDifference(a: GrayFrame, b: GrayFrame): number {
+  if (a.w !== b.w || a.h !== b.h) return 255;
+  let sum = 0;
+  for (let i = 0; i < a.data.length; i += 2) sum += Math.abs(a.data[i] - b.data[i]);
+  return sum / (a.data.length / 2);
+}
+
+/**
+ * Fraction of pixels on a strong edge. Written text and diagrams score far
+ * higher than a blank wall or a face, so this gates which frames are worth
+ * sending for recognition.
+ */
+export function edgeDensity(f: GrayFrame): number {
+  let edges = 0;
+  let n = 0;
+  for (let y = 1; y < f.h - 1; y += 2) {
+    for (let x = 1; x < f.w - 1; x += 2) {
+      const i = y * f.w + x;
+      const gx = f.data[i + 1] - f.data[i - 1];
+      const gy = f.data[i + f.w] - f.data[i - f.w];
+      if (Math.abs(gx) + Math.abs(gy) > 60) edges++;
+      n++;
+    }
+  }
+  return edges / n;
+}

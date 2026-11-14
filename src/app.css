@@ -32,30 +32,36 @@ body,
   padding: var(--uit-spacing-large);
 }
 
-.diagram {
-  display: block;
-  inline-size: 100%;
-  aspect-ratio: 5 / 2;
-}
-
 .hints {
   display: flex;
   flex-direction: column;
   gap: var(--uit-spacing-small);
 }
 
-.stage {
+.lens {
   position: relative;
-  inline-size: 100%;
-  aspect-ratio: 16 / 10;
+  isolation: isolate;
   overflow: hidden;
-  border-radius: var(--uit-corner-radius-medium);
+  inline-size: 100%;
+  block-size: 100%;
 }
 
-.stage-layer {
+.ar-layer {
   position: absolute;
   inset: 0;
   inline-size: 100%;
   block-size: 100%;
   object-fit: cover;
+  pointer-events: none;
+}
+
+.ar-video-hidden {
+  visibility: hidden;
+}
+
+.lens-ui {
+  position: relative;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
 }
