@@ -1,30 +1,15 @@
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import switchIcon from '@wearables-ui-toolkit/icons/svg/switchright__filled.svg';
-import {
-  Button,
-  type ButtonHandle,
-  ButtonRail,
-  Page,
-  Panel,
-  ScrollView,
-  TextColor,
-  TextStyle,
-  TextView,
-  Toast,
-} from '@wearables-ui-toolkit/mrbd';
-import type {Scan} from '../server/schema';
-import type {ARStage} from './ar/arStage';
-import {edgeDensity, frameDifference, type GrayFrame} from './ar/tracker';
-import {captureFrame, requestScan, ScanError, useCamera} from './camera';
-import {PALETTE, type TextRun} from './palette';
+import {Button, type ButtonHandle, Toast} from '@wearables-ui-toolkit/mrbd';
+import {requestScan, useCamera} from './camera';
+import {IdleView} from './lens/IdleView';
+import {StepPage} from './lens/StepPage';
+import type {Found, TextStatus} from './lens/types';
+import {useArStage} from './lens/useArStage';
+import {useProblemWatcher} from './lens/useProblemWatcher';
+import {useMathLensTools} from './webmcp';
 
-/** How often the camera view is checked for a new problem. */
-const WATCH_MS = 700;
-/** Never send frames for recognition more often than this. */
-const MIN_REQUEST_GAP_MS = 6000;
-/** Wait this long after a failed request before trying again. */
-const ERROR_BACKOFF_MS = 15000;
-/** Forget a problem that has been out of view this long. */
+/** Forget a camera-found problem that has been out of view this long. */
 const FORGET_AFTER_MS = 8000;
 
 /**
@@ -34,58 +19,34 @@ const FORGET_AFTER_MS = 8000;
  */
 const SHOW_VIDEO = !new URLSearchParams(location.search).has('glasses');
 
-interface Found {
-  scan: Scan;
-  snapshot: GrayFrame;
-}
-
-function toRuns(text: Scan['steps'][number]['text']): TextRun[] {
-  return text.map(r => (r.color === 'none' ? r.t : ([r.t, r.color] as const)));
-}
-
-function StepText({runs}: {runs: readonly TextRun[]}) {
-  return (
-    <TextView as="p" textStyle={TextStyle.BODY2_EMPHASIZED}>
-      {runs.map((run, i) =>
-        typeof run === 'string' ? (
-          <span key={i}>{run}</span>
-        ) : (
-          <span key={i} style={{color: PALETTE[run[1]]}}>
-            {run[0]}
-          </span>
-        ),
-      )}
-    </TextView>
-  );
-}
-
 /**
- * Shows nothing until the camera sees a math problem. Then it tethers a 3D
- * model above the problem and offers the solution steps; when the problem
- * leaves the view, everything disappears again.
+ * Shows nothing until a math problem is found. Where a camera is available it
+ * watches for one and tethers a 3D model above it. On the glasses (web apps
+ * get no camera) the problem comes from Meta AI via WebMCP, or is dictated or
+ * handwritten into the field, and the model sits mid-screen.
  */
 export function LensApp() {
   const camera = useCamera();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stageRef = useRef<ARStage | null>(null);
   const toggleRef = useRef<ButtonHandle>(null);
-  /** The wearer can switch the visualizer off; it starts on. */
-  const [enabled, setEnabled] = useState(true);
 
+  /** Camera watching; the wearer can switch it off. */
+  const [enabled, setEnabled] = useState(true);
   const [found, setFound] = useState<Found | null>(null);
-  const [inView, setInView] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [hintsShown, setHintsShown] = useState(0);
+  const [textStatus, setTextStatus] = useState<TextStatus>({kind: 'idle'});
+  const [draft, setDraft] = useState('');
+  const textAbort = useRef<AbortController | null>(null);
 
-  // Watch whenever the visualizer is on; release the camera when it is off.
   useEffect(() => {
     if (enabled) void camera.start();
     else camera.stop();
   }, [enabled, camera.start, camera.stop]);
 
-  // If the camera can't start, show the visualizer as off. Explain why only
-  // when the wearer asked for it, not unprompted at launch.
+  // If the camera can't start (as on the glasses), show watching as off.
+  // Explain why only when the wearer asked for it, not at launch.
   const userStarted = useRef(false);
   useEffect(() => {
     if (camera.state.status !== 'error') return;
@@ -94,7 +55,6 @@ export function LensApp() {
   }, [camera.state]);
 
   const stream = camera.state.status === 'on' ? camera.state.stream : null;
-
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) return;
@@ -102,151 +62,120 @@ export function LensApp() {
     void video.play().catch(() => undefined);
   }, [stream]);
 
-  // Three.js loads with the camera and renders nothing until a problem is
-  // found. The stage is created once (a WebGL canvas can't host a second
-  // renderer); turning the visualizer off pauses and clears it.
-  useEffect(() => {
-    if (!stream) {
-      stageRef.current?.pause();
-      return;
-    }
-    if (stageRef.current) {
-      stageRef.current.start();
-      return;
-    }
-    let cancelled = false;
-    void import('./ar/arStage').then(({ARStage}) => {
-      if (cancelled || !canvasRef.current || !videoRef.current || stageRef.current) return;
-      const stage = new ARStage(canvasRef.current, videoRef.current);
-      stage.onTracking = setInView;
-      stageRef.current = stage;
-      stage.start();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [stream]);
+  const steps = found?.scan.steps ?? [];
+  const step = found ? steps[stepIndex] : undefined;
 
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.hidden) stageRef.current?.stop();
-      else if (videoRef.current?.srcObject) stageRef.current?.start();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      stageRef.current?.dispose();
-      stageRef.current = null;
-    };
+  const {stageRef, inView, setInView} = useArStage(
+    canvasRef,
+    videoRef,
+    Boolean(stream) || found !== null,
+    found,
+    step?.highlight ?? 'none',
+  );
+
+  const show = useCallback((next: Found) => {
+    setStepIndex(0);
+    setHintsShown(0);
+    setFound(next);
   }, []);
+  useProblemWatcher(stream, found, stageRef, videoRef, show);
 
-  const step = found?.scan.steps[stepIndex];
-
+  // Forget a camera-found problem once it has been out of view for a while.
   useEffect(() => {
-    stageRef.current?.setScan(found?.scan ?? null, found?.snapshot ?? null, step?.highlight ?? 'none');
-  }, [found, step]);
-
-  // Forget the problem once it has been out of view for a while, and go back
-  // to watching for a new one.
-  useEffect(() => {
-    if (!found || inView) return;
+    if (!found || found.source !== 'camera' || inView) return;
     const timer = window.setTimeout(() => setFound(null), FORGET_AFTER_MS);
     return () => window.clearTimeout(timer);
   }, [found, inView]);
 
-  // Watch the camera for a steady, text-like view and only then ask Claude.
-  useEffect(() => {
-    if (!stream || found) return;
-    const controller = new AbortController();
-    let previous: GrayFrame | null = null;
-    let rejected: GrayFrame | null = null;
-    let steady = 0;
-    let nextAllowed = 0;
-    let busy = false;
-    let stopped = false;
+  const showUi = found !== null && step !== undefined && (found.source === 'text' || inView);
 
-    const check = async () => {
-      const stage = stageRef.current;
-      const video = videoRef.current;
-      if (busy || stopped || document.hidden || !stage || !video) return;
-      const frame = stage.snapshot();
-      if (!frame) return;
-
-      const motion = previous ? frameDifference(previous, frame) : Infinity;
-      previous = frame;
-      steady = motion < 6 ? steady + 1 : 0;
-      if (steady < 2) return;
-      if (edgeDensity(frame) < 0.05) return;
-      if (rejected && frameDifference(rejected, frame) < 10) return;
-      if (Date.now() < nextAllowed) return;
-
-      const image = captureFrame(video);
-      if (!image) return;
-      busy = true;
-      nextAllowed = Date.now() + MIN_REQUEST_GAP_MS;
-      try {
-        const scan = await requestScan(image, controller.signal);
-        if (scan.found && scan.steps.length > 0) {
-          setStepIndex(0);
-          setHintsShown(0);
-          setFound({scan, snapshot: frame});
-        } else {
-          rejected = frame;
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        if (error instanceof ScanError && error.fatal) {
-          stopped = true;
-          Toast.show(error.message);
-        } else {
-          nextAllowed = Date.now() + ERROR_BACKOFF_MS;
-        }
-      } finally {
-        busy = false;
-      }
-    };
-
-    const timer = window.setInterval(() => void check(), WATCH_MS);
-    return () => {
-      window.clearInterval(timer);
-      controller.abort();
-    };
-  }, [stream, found]);
-
-  const steps = found?.scan.steps ?? [];
-  const allHintsShown = !step || hintsShown >= step.hints.length;
-  const showUi = found !== null && inView && step !== undefined;
-
-  // The toggle is the one control that is always present; keep focus on it
-  // when the step controls appear or disappear.
+  // Keep focus on the always-present control when the step controls come and go.
   useEffect(() => {
     toggleRef.current?.getElement()?.focus({preventScroll: true});
   }, [showUi]);
 
-  const handleToggle = () => {
-    if (enabled) {
-      setFound(null);
-      setInView(false);
+  /** Build the steps for a problem given as text (Meta AI, dictation or handwriting). */
+  const submitText = async (text: string) => {
+    textAbort.current?.abort();
+    const controller = new AbortController();
+    textAbort.current = controller;
+    setTextStatus({kind: 'working'});
+    try {
+      const scan = await requestScan({text}, controller.signal);
+      if (!scan.found || scan.steps.length === 0) {
+        setTextStatus({kind: 'error', message: 'That doesn’t look like a math problem. Try again.'});
+        return;
+      }
+      show({scan, snapshot: null, source: 'text'});
+      setTextStatus({kind: 'idle'});
+      setDraft('');
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setTextStatus({kind: 'error', message: error instanceof Error ? error.message : 'Something went wrong.'});
     }
+  };
+
+  const clearProblem = () => {
+    textAbort.current?.abort();
+    setFound(null);
+    setInView(false);
+    setTextStatus({kind: 'idle'});
+  };
+
+  /** Show step i (wrapping) and return its index. */
+  const goTo = (i: number) => {
+    if (steps.length === 0) return 0;
+    const next = (i + steps.length) % steps.length;
+    setStepIndex(next);
+    setHintsShown(0);
+    return next;
+  };
+
+  const describeStep = (i: number) => {
+    const s = steps[i];
+    return s && {number: i + 1, total: steps.length, label: s.label, text: s.text.map(r => r.t).join('')};
+  };
+
+  const handleToggle = () => {
+    if (enabled) clearProblem();
     userStarted.current = !enabled;
     setEnabled(!enabled);
   };
 
-  const toggle = (
-    <Button
-      ref={toggleRef}
-      icon={switchIcon}
-      title={enabled ? 'Turn off' : 'Turn on'}
-      showIconActiveIndicator={enabled}
-      onClick={handleToggle}
-    />
-  );
+  useMathLensTools({
+    state: () => ({
+      status: textStatus.kind === 'working' ? 'working' : showUi ? 'showing' : 'idle',
+      problem: found?.scan.problem_text,
+      step: describeStep(stepIndex),
+      hintsShown: step ? step.hints.slice(0, hintsShown) : [],
+      hintsLeft: step ? Math.max(0, step.hints.length - hintsShown) : 0,
+      lastError: textStatus.kind === 'error' ? textStatus.message : undefined,
+    }),
+    showProblem: text => void submitText(text),
+    step: direction =>
+      describeStep(direction === 'first' ? goTo(0) : goTo(stepIndex + (direction === 'next' ? 1 : -1))),
+    hint: () => {
+      if (!step || hintsShown >= step.hints.length) return null;
+      setHintsShown(hintsShown + 1);
+      return step.hints[hintsShown];
+    },
+    clear: clearProblem,
+  });
 
-  const goTo = (i: number) => {
-    setStepIndex((i + steps.length) % steps.length);
-    setHintsShown(0);
-  };
-  const hintTitle = allHintsShown && hintsShown > 0 ? 'Hide hints' : hintsShown === 0 ? 'Hint' : 'More';
+  // A typed or spoken problem has no camera to watch, so the always-present
+  // control clears it instead; otherwise it switches camera watching on/off.
+  const lead =
+    found?.source === 'text' ? (
+      <Button ref={toggleRef} title="New problem" onClick={clearProblem} />
+    ) : (
+      <Button
+        ref={toggleRef}
+        icon={switchIcon}
+        title={enabled ? 'Turn off' : 'Turn on'}
+        showIconActiveIndicator={enabled}
+        onClick={handleToggle}
+      />
+    );
 
   return (
     <div className="lens">
@@ -265,50 +194,25 @@ export function LensApp() {
       />
       <div className="lens-ui">
         {showUi && step ? (
-          <Page
-            headerText={step.label}
-            headerMetadata={`${stepIndex + 1}/${steps.length}`}
-            enableSystemBarInset={false}>
-            <div className="action-page-shell">
-              <ScrollView insetForHeader tabIndex={0} ariaLabel={`${step.label} step`}>
-                <Panel width="100%">
-                  <div className="content-inset">
-                    <StepText runs={toRuns(step.text)} />
-                    {hintsShown > 0 && (
-                      <div className="hints" aria-live="polite">
-                        <TextView as="p" textStyle={TextStyle.LABEL} textColor={TextColor.SECONDARY}>
-                          THINK ABOUT IT
-                        </TextView>
-                        {step.hints.slice(0, hintsShown).map(hint => (
-                          <TextView key={hint} as="p" textStyle={TextStyle.BODY2}>
-                            {hint}
-                          </TextView>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </Panel>
-              </ScrollView>
-              <div className="action-dock">
-                <ButtonRail>
-                  {toggle}
-                  <Button title="Previous" onClick={() => goTo(stepIndex - 1)} />
-                  <Button
-                    title={hintTitle}
-                    onClick={() => setHintsShown(allHintsShown ? 0 : hintsShown + 1)}
-                  />
-                  <Button title="Next" onClick={() => goTo(stepIndex + 1)} />
-                </ButtonRail>
-              </div>
-            </div>
-          </Page>
+          <StepPage
+            step={step}
+            index={stepIndex}
+            total={steps.length}
+            hintsShown={hintsShown}
+            lead={lead}
+            onPrevious={() => goTo(stepIndex - 1)}
+            onHint={() => setHintsShown(hintsShown >= step.hints.length ? 0 : hintsShown + 1)}
+            onNext={() => goTo(stepIndex + 1)}
+          />
         ) : (
-          <div className="action-page-shell">
-            <div />
-            <div className="action-dock">
-              <ButtonRail>{toggle}</ButtonRail>
-            </div>
-          </div>
+          <IdleView
+            lead={lead}
+            showComposer={!stream}
+            draft={draft}
+            status={textStatus}
+            onDraftChange={setDraft}
+            onSubmit={text => void submitText(text)}
+          />
         )}
       </div>
     </div>

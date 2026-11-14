@@ -65,3 +65,13 @@ body,
   inline-size: 100%;
   block-size: 100%;
 }
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--uit-spacing-small);
+  min-block-size: 0;
+  min-inline-size: 0;
+  padding: var(--uit-spacing-large);
+}

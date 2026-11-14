@@ -27,18 +27,17 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   };
   if (req.method !== 'POST') return send(405, {error: 'POST only'});
 
-  const {recognize, RecognizeError, MAX_BODY_BYTES} = await import('./server/recognize.ts');
+  const {recognize, parseInput, RecognizeError, MAX_BODY_BYTES} = await import('./server/recognize.ts');
   try {
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const chunk of req) {
       size += (chunk as Buffer).length;
-      if (size > MAX_BODY_BYTES) return send(413, {error: 'Image too large'});
+      if (size > MAX_BODY_BYTES) return send(413, {error: 'Request too large'});
       chunks.push(chunk as Buffer);
     }
-    const {image} = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {image?: unknown};
-    if (typeof image !== 'string' || image.length === 0) return send(400, {error: 'Missing image'});
-    send(200, await recognize(image));
+    const input = parseInput(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    send(200, await recognize(input));
   } catch (error) {
     if (error instanceof RecognizeError) return send(error.status, {error: error.message});
     console.error('[recognize]', error);

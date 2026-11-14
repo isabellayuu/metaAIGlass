@@ -81,11 +81,15 @@ export class ScanError extends Error {
   }
 }
 
-export async function requestScan(image: string, signal: AbortSignal): Promise<Scan> {
+/** Ask the server to recognize a camera frame ({image}) or a typed/dictated problem ({text}). */
+export async function requestScan(
+  input: {image: string} | {text: string},
+  signal: AbortSignal,
+): Promise<Scan> {
   const res = await fetch('/api/recognize', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({image}),
+    body: JSON.stringify(input),
     signal,
   });
   const body = (await res.json().catch(() => ({}))) as Scan & {error?: string};
