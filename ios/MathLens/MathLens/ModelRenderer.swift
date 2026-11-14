@@ -10,9 +10,9 @@ import UIKit
 /// the glasses display can only be white or gray. The background is black,
 /// which is see-through on the glasses.
 enum ModelRenderer {
-  static let size = CGSize(width: 600, height: 400)
-  private static let dotsBand: CGFloat = 40
-  private static let stripBand: CGFloat = 96
+  static let size = CGSize(width: 600, height: 340)
+  private static let dotsBand: CGFloat = 36
+  private static let stripBand: CGFloat = 88
 
   /// Draws step `index` of `count`. The final answer is never drawn: where
   /// the result would go, the model and the strip show "?".
@@ -30,17 +30,17 @@ enum ModelRenderer {
       drawDots(index: index, count: count, in: ctx)
       let top = dotsBand
       let bottom = strip.isEmpty ? size.height : size.height - stripBand
-      let modelHeight = bottom - top
-      let target = min(size.width * 0.95, modelHeight * 1.3)
       let tilt = scan.model.kind == .numberLine ? (x: 0.2, y: -0.15) : (x: 0.55, y: -0.6)
-      draw(
-        model,
-        in: ctx,
-        origin: CGPoint(x: size.width / 2, y: top + modelHeight * 0.55),
-        scale: target / model.extent,
-        rx: tilt.x,
-        ry: tilt.y
-      )
+      // Measure the drawn model and fit it, centred, into the space between
+      // the dots and the strip, whatever its shape (wide number line, tall box…).
+      let area = CGRect(x: 16, y: top, width: size.width - 32, height: bottom - top)
+      if scan.model.kind == .numberLine {
+        drawNumberLine(scan.model.values, highlight: step.highlight, in: ctx, area: area.insetBy(dx: 14, dy: 4))
+      } else {
+        // Leave room for the fixed-size labels around the model.
+        let (origin, scale) = fit(model, rx: tilt.x, ry: tilt.y, into: area.insetBy(dx: 40, dy: 22))
+        draw(model, in: ctx, origin: origin, scale: scale, rx: tilt.x, ry: tilt.y)
+      }
       if !strip.isEmpty {
         drawStrip(strip, in: ctx, band: CGRect(x: 0, y: bottom, width: size.width, height: stripBand))
       }
@@ -79,8 +79,13 @@ enum ModelRenderer {
   private enum Prim {
     case box(c: Vec3, s: Vec3, color: UIColor, bright: Bool)
     case ball(c: Vec3, r: Double, color: UIColor, bright: Bool)
+    /// `size` is in pixels: labels keep a readable size whatever the model's scale.
     case label(c: Vec3, text: String, color: UIColor, size: Double)
   }
+
+  /// Label sizes in pixels.
+  private static let labelPx = 30.0
+  private static let resultPx = 46.0
 
   private struct Model {
     var prims: [Prim]
@@ -175,16 +180,16 @@ enum ModelRenderer {
         g.box(t, H, t, hOn ? (total ? totalColor : heightColor) : dim, hOn, Vec3(L / 2, H / 2, W / 2))
       }
       if lOn && !total {
-        g.label(fmt(m.length, unit), lengthColor, ls, Vec3(0, y + ls * 0.6, W / 2 + ls * 0.7))
+        g.label(fmt(m.length, unit), lengthColor, labelPx, Vec3(0, y + ls * 0.6, W / 2 + ls * 0.7))
       }
       if wOn && !total {
-        g.label(fmt(m.width, unit), widthColor, ls, Vec3(L / 2 + ls * 1.2, y + ls * 0.6, 0))
+        g.label(fmt(m.width, unit), widthColor, labelPx, Vec3(L / 2 + ls * 1.2, y + ls * 0.6, 0))
       }
       if hOn && H > 0 && !total {
-        g.label(fmt(m.height, unit), heightColor, ls, Vec3(L / 2 + ls * 1.2, H / 2, W / 2))
+        g.label(fmt(m.height, unit), heightColor, labelPx, Vec3(L / 2 + ls * 1.4, H * 0.85, W / 2))
       }
       if total {
-        g.label("?", totalColor, ls * 1.4, Vec3(0, max(H, t) + ls * 1.2, 0))
+        g.label("?", totalColor, resultPx, Vec3(0, max(H, t) + ls * 1.2, 0))
       }
       return Model(prims: g.prims, extent: extent * 1.4)
 
@@ -202,8 +207,13 @@ enum ModelRenderer {
         let gx = Double(gi % perRow) * (plate + 0.8) - Double(perRow - 1) * (plate + 0.8) / 2
         let gz = Double(gi / perRow) * (plate + 0.8)
         g.box(plate, 0.15, plate, platesOn ? widthColor : dim, platesOn, Vec3(gx, 0, gz))
+        if platesOn && !total {
+          g.label("\(gi + 1)", widthColor, labelPx, Vec3(gx, 0, gz + plate / 2 + 0.7))
+        }
         for n in 0..<N {
-          g.ball(0.36, total ? totalColor : itemsOn ? lengthColor : dim, itemsOn, Vec3(
+          // Apples stay orange even when another part is highlighted, so it is
+          // always clear what lies on the plates.
+          g.ball(0.36, total ? totalColor : lengthColor, itemsOn || total, Vec3(
             gx - Double(cols - 1) / 2 + Double(n % cols),
             0.45,
             gz - Double(cols - 1) / 2 + Double(n / cols)
@@ -213,9 +223,7 @@ enum ModelRenderer {
       let width = Double(perRow) * (plate + 0.8)
       let ls = width * 0.14
       if total {
-        g.label("?", totalColor, ls * 1.4, Vec3(0, ls * 2, 0))
-      } else if platesOn {
-        g.label("\(G) groups", widthColor, ls, Vec3(0, ls * 1.6, 0))
+        g.label("?", totalColor, resultPx, Vec3(0, ls * 2, 0))
       }
       return Model(prims: g.prims, extent: width)
 
@@ -242,14 +250,14 @@ enum ModelRenderer {
         let rowY = v < 0 ? bar * 3 : 0
         g.box(max(0.05, abs(v) * scale), bar, bar, color, on || h == .none, Vec3((start + end) / 2, rowY, 0))
         let text = v < 0 ? "− \(num(abs(v)))" : i == 0 ? num(v) : "+ \(num(v))"
-        g.label(text, color, 1.6, Vec3((start + end) / 2, rowY + 1.3, 0))
+        g.label(text, color, labelPx, Vec3((start + end) / 2, rowY + 1.3, 0))
         cur += v
         lo = min(lo, cur * scale)
         hi = max(hi, cur * scale)
       }
       if roles.contains(.total) {
         g.box(max(0.05, abs(sum) * scale), bar, bar, totalColor, true, Vec3(sum * scale / 2, -bar * 1.6, 0))
-        g.label("?", totalColor, 1.8, Vec3(sum * scale / 2, -bar * 1.6 - 1.5, 0))
+        g.label("?", totalColor, resultPx, Vec3(sum * scale / 2, -bar * 1.6 - 1.5, 0))
       }
       // Centre the line horizontally.
       let shift = Vec3((lo + hi) / 2, 0, 0)
@@ -294,13 +302,58 @@ enum ModelRenderer {
     case ball(CGPoint, radius: CGFloat, color: UIColor, alpha: Double)
   }
 
-  private static func draw(_ model: Model, in ctx: CGContext, origin: CGPoint, scale: Double, rx: Double, ry: Double) {
+  /// Rotation about Y, then X: tilts the model so its top face shows.
+  private static func rotator(_ rx: Double, _ ry: Double) -> (Vec3) -> Vec3 {
     let (cx, sx, cy, sy) = (cos(rx), sin(rx), cos(ry), sin(ry))
-    let rot = { (v: Vec3) -> Vec3 in
+    return { v in
       let x1 = v.x * cy + v.z * sy
       let z1 = -v.x * sy + v.z * cy
       return Vec3(x1, v.y * cx - z1 * sx, v.y * sx + z1 * cx)
     }
+  }
+
+  /// Origin and scale that fit the whole drawn model (boxes, balls and
+  /// labels) into `rect`, centred.
+  private static func fit(_ model: Model, rx: Double, ry: Double, into rect: CGRect) -> (CGPoint, Double) {
+    let rot = rotator(rx, ry)
+    var minX = Double.infinity, maxX = -Double.infinity, minY = Double.infinity, maxY = -Double.infinity
+    func add(_ x: Double, _ y: Double) {
+      minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+    }
+    for p in model.prims {
+      switch p {
+      case let .box(c, s, _, _):
+        for i in 0..<8 {
+          let v = rot(Vec3(
+            c.x + (i & 1 != 0 ? 0.5 : -0.5) * s.x,
+            c.y + (i & 2 != 0 ? 0.5 : -0.5) * s.y,
+            c.z + (i & 4 != 0 ? 0.5 : -0.5) * s.z
+          ))
+          add(v.x, v.y)
+        }
+      case let .ball(c, r, _, _):
+        let v = rot(c)
+        add(v.x - r, v.y - r)
+        add(v.x + r, v.y + r)
+      case let .label(c, _, _, _):
+        // Fixed pixel size: render() leaves room for the text around the model.
+        let v = rot(c)
+        add(v.x, v.y)
+      }
+    }
+    guard minX.isFinite, maxX > minX || maxY > minY else {
+      return (CGPoint(x: rect.midX, y: rect.midY), 1)
+    }
+    let scale = min(rect.width / max(maxX - minX, 0.01), rect.height / max(maxY - minY, 0.01)) * 0.92
+    let origin = CGPoint(
+      x: rect.midX - (minX + maxX) / 2 * scale,
+      y: rect.midY + (minY + maxY) / 2 * scale
+    )
+    return (origin, scale)
+  }
+
+  private static func draw(_ model: Model, in ctx: CGContext, origin: CGPoint, scale: Double, rx: Double, ry: Double) {
+    let rot = rotator(rx, ry)
     let project = { (v: Vec3) in CGPoint(x: origin.x + v.x * scale, y: origin.y - v.y * scale) }
 
     var items: [(z: Double, item: Drawable)] = []
@@ -316,7 +369,7 @@ enum ModelRenderer {
             c.z + (i & 4 != 0 ? 0.5 : -0.5) * s.z
           ))
         }
-        let alpha = bright ? 1 : 0.35
+        let alpha = bright ? 1 : 0.5
         for (idx, normal) in faces {
           let n = rot(normal)
           if n.z <= 0 { continue }  // facing away from the viewer
@@ -329,9 +382,9 @@ enum ModelRenderer {
         }
       case let .ball(c, r, color, bright):
         let center = rot(c)
-        items.append((center.z, .ball(project(center), radius: r * scale, color: color, alpha: bright ? 1 : 0.35)))
+        items.append((center.z, .ball(project(center), radius: r * scale, color: color, alpha: bright ? 1 : 0.5)))
       case let .label(c, text, color, size):
-        labels.append((project(rot(c)), text, color, size * scale))
+        labels.append((project(rot(c)), text, color, size))
       }
     }
 
@@ -367,7 +420,7 @@ enum ModelRenderer {
 
     // Labels face the viewer and sit on top, outlined so they read over anything.
     for label in labels {
-      let px = max(18, (label.px * 0.75).rounded())
+      let px = label.px
       drawOutlined(label.text, color: label.color, size: px, centeredAt: label.at)
     }
   }
@@ -382,6 +435,80 @@ enum ModelRenderer {
     let at = CGPoint(x: p.x - s.width / 2, y: p.y - s.height / 2)
     outline.draw(at: at)
     fill.draw(at: at)
+  }
+
+  // MARK: - Number line
+
+  /// Addition and subtraction as jumps along a real number line: the first
+  /// quantity is an orange jump from 0, every later one a blue jump (forward
+  /// above the line, backward below it), and the landing point is a green "?".
+  /// Only 0 is labelled on the line, so no tick gives the answer away.
+  private static func drawNumberLine(_ raw: [Double], highlight h: Highlight, in ctx: CGContext, area: CGRect) {
+    let values = raw.isEmpty ? [0] : raw
+    let roles = activeRoles(h)
+    var points = [0.0]
+    for v in values { points.append(points.last! + v) }
+    let lo = min(0, points.min()!), hi = max(points.max()!, lo + 1)
+    let hasBack = values.dropFirst().contains { $0 < 0 }
+    let axisY = area.minY + area.height * (hasBack ? 0.5 : 0.72)
+    let x0 = area.minX + 20, x1 = area.maxX - 20
+    let px = { (v: Double) in x0 + (v - lo) / (hi - lo) * (x1 - x0) }
+
+    // The line and its ticks.
+    ctx.setStrokeColor(UIColor(white: 0.85, alpha: 1).cgColor)
+    ctx.setLineWidth(3)
+    ctx.strokeLineSegments(between: [CGPoint(x: x0 - 12, y: axisY), CGPoint(x: x1 + 12, y: axisY)])
+    let span = hi - lo
+    let step = span <= 30 ? 1.0 : (span / 20).rounded(.up)
+    var tick = (lo / step).rounded(.up) * step
+    ctx.setLineWidth(2)
+    while tick <= hi + 1e-9 {
+      let big = tick == 0
+      ctx.strokeLineSegments(between: [CGPoint(x: px(tick), y: axisY - (big ? 12 : 7)), CGPoint(x: px(tick), y: axisY + (big ? 12 : 7))])
+      tick += step
+    }
+    drawOutlined("0", color: UIColor(white: 0.85, alpha: 1), size: 24, centeredAt: CGPoint(x: px(0), y: axisY + (hasBack ? -26 : 28)))
+
+    // One jump per quantity.
+    let maxUp = axisY - area.minY - 40, maxDown = area.maxY - axisY - 34
+    let biggest = max(values.map(abs).max() ?? 1, 1)
+    for (i, v) in values.enumerated() {
+      let color = i == 0 ? lengthColor : widthColor
+      let on = h == .none || roles.contains(.total) || (i == 0 ? roles.contains(.length) : roles.contains(.width))
+      let a = CGPoint(x: px(points[i]), y: axisY), b = CGPoint(x: px(points[i + 1]), y: axisY)
+      let down = i > 0 && v < 0
+      let height = down ? min(maxDown * 0.45, 34) : maxUp * (0.45 + 0.55 * abs(v) / biggest)
+      let peak = CGPoint(x: (a.x + b.x) / 2, y: axisY + (down ? height : -height))
+      let path = UIBezierPath()
+      path.move(to: a)
+      path.addQuadCurve(to: b, controlPoint: CGPoint(x: peak.x, y: axisY + (peak.y - axisY) * 2))
+      ctx.setStrokeColor(color.withAlphaComponent(on ? 1 : 0.35).cgColor)
+      ctx.setLineWidth(on ? 5 : 3)
+      ctx.setLineCap(.round)
+      ctx.addPath(path.cgPath)
+      ctx.strokePath()
+      // Arrow head at the landing point.
+      let dir: CGFloat = b.x >= a.x ? 1 : -1
+      let tip = UIBezierPath()
+      tip.move(to: b)
+      tip.addLine(to: CGPoint(x: b.x - dir * 14, y: b.y + (down ? 10 : -10)))
+      tip.move(to: b)
+      tip.addLine(to: CGPoint(x: b.x - dir * 2, y: b.y + (down ? 18 : -18)))
+      ctx.addPath(tip.cgPath)
+      ctx.strokePath()
+      let text = i == 0 ? num(v) : (v < 0 ? "− \(num(abs(v)))" : "+ \(num(v))")
+      drawOutlined(text, color: color.withAlphaComponent(on ? 1 : 0.45), size: labelPx,
+                   centeredAt: CGPoint(x: peak.x, y: peak.y + (down ? 20 : -20)))
+    }
+
+    // The landing point: where the answer is, never what it is.
+    let end = CGPoint(x: px(points.last!), y: axisY)
+    ctx.setFillColor(totalColor.cgColor)
+    ctx.fillEllipse(in: CGRect(x: end.x - 9, y: end.y - 9, width: 18, height: 18))
+    if roles.contains(.total) || h == .none {
+      // Below the line, under any backward jump, so it never sits on an arc.
+      drawOutlined("?", color: totalColor, size: resultPx, centeredAt: CGPoint(x: end.x, y: end.y + (hasBack ? 74 : 34)))
+    }
   }
 
   // MARK: - Math strip

@@ -67,6 +67,10 @@ final class GlassesController {
     self.selector = AutoDeviceSelector(wearables: wearables, filter: { $0.supportsDisplay() })
     self.server = UserDefaults.standard.string(forKey: "server") ?? RecognizeClient.defaultServer
     self.demoMode = UserDefaults.standard.bool(forKey: "demoMode")
+    #if DEBUG
+    // Tests can start the demo at another example (defaults key "demoStart").
+    demoIndex = UserDefaults.standard.integer(forKey: "demoStart")
+    #endif
     registrationTask = Task { [weak self] in
       guard let stream = self?.wearables.registrationStateStream() else { return }
       for await state in stream {

@@ -52,9 +52,9 @@ enum GlassesScreens {
     var scan: Action
   }
 
-  /// One solution step, visual first: the picture (progress dots, model and
-  /// math strip) carries the step. Words appear only as an optional short
-  /// caption. Buttons are icons only: back, next (or scan on the last step).
+  /// One solution step: the picture (progress dots, model and math strip) and
+  /// below it the same sentence the phone shows. Buttons are icons only:
+  /// back, next (or scan on the last step).
   static func step(
     _ step: ScanStep,
     index: Int,
@@ -63,8 +63,8 @@ enum GlassesScreens {
     actions: StepActions
   ) -> FlexBox {
     let isLast = index == count - 1
-    // Without a picture the strip is not drawn, so fall back to the sentence.
-    let words = picture == nil ? step.plainText : step.caption
+    // The step's sentence, as on the phone (the caption if there is none).
+    let words = step.plainText.isEmpty ? step.caption : step.plainText
     return FlexBox(direction: .column, spacing: 8) {
       if let picture {
         Image(image: picture, sizePreset: .fill, cornerRadius: .medium)

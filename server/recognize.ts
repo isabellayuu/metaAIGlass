@@ -10,8 +10,21 @@ import {ScanSchema, type Scan} from './schema.ts';
  * kept as an alternative for when ANTHROPIC_API_KEY is set instead.
  */
 const USE_GEMINI = () => Boolean(process.env.GEMINI_API_KEY) || !process.env.ANTHROPIC_API_KEY;
-/** "Latest Flash" alias, so a model rename doesn't break the app. Override with GEMINI_MODEL. */
-const GEMINI_MODEL = () => process.env.GEMINI_MODEL || 'gemini-flash-latest';
+/**
+ * Gemini models to try, in order. The first is GEMINI_MODEL; the rest are
+ * fallbacks (override with GEMINI_FALLBACK_MODELS, comma-separated) for when
+ * a model is overloaded or rate limited, as the hackathon guide recommends.
+ */
+const GEMINI_MODELS = (): string[] => {
+  const primary = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  const fallbacks = (process.env.GEMINI_FALLBACK_MODELS ?? 'gemini-3.6-flash,gemini-3.1-flash-lite')
+    .split(',')
+    .map(m => m.trim())
+    .filter(Boolean);
+  return [...new Set([primary, ...fallbacks])];
+};
+/** Wait before retrying the first model once when Gemini is busy. */
+const RETRY_DELAY_MS = 1500;
 
 const SYSTEM = `You help learners with dyslexia and dyscalculia understand math word problems.
 
@@ -59,52 +72,88 @@ function geminiSchema(): unknown {
   return schema;
 }
 
+/**
+ * Reads the problem with Gemini. When a model answers "busy" (429 or 503),
+ * retries the first model once after a short wait, then moves on to the next
+ * model in GEMINI_MODELS. At most models + 1 calls, so a busy day does not
+ * turn into many requests.
+ */
 async function recognizeWithGemini(input: RecognizeInput): Promise<Scan> {
   if (!process.env.GEMINI_API_KEY) {
     throw new RecognizeError('GEMINI_API_KEY is not set. Add it to .env.local.', 401);
   }
   gemini ??= new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY});
-  try {
-    const response = await gemini.models.generateContent({
-      model: GEMINI_MODEL(),
-      contents: [
-        {
-          role: 'user',
-          parts:
-            'image' in input
-              ? [{inlineData: {mimeType: 'image/jpeg', data: input.image}}, {text: IMAGE_PROMPT}]
-              : [{text: TEXT_PROMPT(input.text)}],
-        },
-      ],
-      config: {
-        systemInstruction: SYSTEM,
-        responseMimeType: 'application/json',
-        responseJsonSchema: geminiSchema(),
-      },
-    });
-    const text = response.text;
-    if (!text) throw new RecognizeError('Gemini returned no result.', 502);
-    const parsed = ScanSchema.safeParse(JSON.parse(text));
-    if (!parsed.success) throw new RecognizeError('Gemini returned an unexpected result.', 502);
-    return parsed.data;
-  } catch (error) {
-    if (error instanceof RecognizeError) throw error;
-    if (error instanceof GeminiApiError) {
-      if (error.status === 400 && /api key/i.test(error.message)) {
-        throw new RecognizeError('GEMINI_API_KEY is invalid.', 401);
+  const models = GEMINI_MODELS();
+  let lastBusy: GeminiApiError | undefined;
+  for (const [index, model] of models.entries()) {
+    for (let attempt = 1; attempt <= (index === 0 ? 2 : 1); attempt++) {
+      try {
+        const scan = await callGemini(model, input);
+        console.info('[recognize] gemini ok', {model, attempt, steps: scan.steps.length});
+        return scan;
+      } catch (error) {
+        if (!(error instanceof GeminiApiError)) throw toRecognizeError(error, model);
+        const busy = error.status === 429 || error.status === 503;
+        // A fallback model this key cannot use is skipped like a busy one.
+        const missingFallback = error.status === 404 && index > 0;
+        console.info('[recognize] gemini failed', {model, attempt, status: error.status});
+        if (!busy && !missingFallback) throw toRecognizeError(error, model);
+        if (busy) lastBusy = error;
+        if (busy && index === 0 && attempt === 1) await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        else break;
       }
-      if (error.status === 401 || error.status === 403) {
-        throw new RecognizeError('GEMINI_API_KEY is invalid or not allowed.', 401);
-      }
-      if (error.status === 404) {
-        throw new RecognizeError(`Gemini model "${GEMINI_MODEL()}" not found. Set GEMINI_MODEL.`, 401);
-      }
-      if (error.status === 429) throw new RecognizeError('Rate limited. Try again shortly.', 429);
-      throw new RecognizeError(`Gemini API error ${error.status}`, 502);
     }
-    if (error instanceof SyntaxError) throw new RecognizeError('Gemini returned invalid JSON.', 502);
-    throw error;
   }
+  throw toRecognizeError(lastBusy ?? new Error('No Gemini model available'), models[0]);
+}
+
+/** One Gemini call with the system prompt and the JSON schema. */
+async function callGemini(model: string, input: RecognizeInput): Promise<Scan> {
+  console.info('[recognize] gemini call', {model, input: 'image' in input ? 'image' : 'text'});
+  const response = await gemini!.models.generateContent({
+    model,
+    contents: [
+      {
+        role: 'user',
+        parts:
+          'image' in input
+            ? [{inlineData: {mimeType: 'image/jpeg', data: input.image}}, {text: IMAGE_PROMPT}]
+            : [{text: TEXT_PROMPT(input.text)}],
+      },
+    ],
+    config: {
+      systemInstruction: SYSTEM,
+      responseMimeType: 'application/json',
+      responseJsonSchema: geminiSchema(),
+    },
+  });
+  const text = response.text;
+  if (!text) throw new RecognizeError('Gemini returned no result.', 502);
+  const parsed = ScanSchema.safeParse(JSON.parse(text));
+  if (!parsed.success) throw new RecognizeError('Gemini returned an unexpected result.', 502);
+  return parsed.data;
+}
+
+/** Maps a Gemini failure to a message the app can show. */
+function toRecognizeError(error: unknown, model: string): unknown {
+  if (error instanceof RecognizeError) return error;
+  if (error instanceof GeminiApiError) {
+    if (error.status === 400 && /api key/i.test(error.message)) {
+      return new RecognizeError('GEMINI_API_KEY is invalid.', 401);
+    }
+    if (error.status === 401 || error.status === 403) {
+      return new RecognizeError('GEMINI_API_KEY is invalid or not allowed.', 401);
+    }
+    if (error.status === 404) {
+      return new RecognizeError(`Gemini model "${model}" not found. Set GEMINI_MODEL.`, 401);
+    }
+    if (error.status === 429 || error.status === 503) {
+      return new RecognizeError('Gemini is busy right now. Try again in a minute.', 429);
+    }
+    return new RecognizeError(`Gemini API error ${error.status}`, 502);
+  }
+  if (error instanceof SyntaxError) return new RecognizeError('Gemini returned invalid JSON.', 502);
+  return error;
 }
 
 export class RecognizeError extends Error {
